@@ -1,10 +1,69 @@
 "use client";
-import { Globe, Zap, Palette, X, ChevronLeft, ChevronRight, Check } from "lucide-react";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { Zap, Check, X, AlertTriangle, Globe, Palette } from "lucide-react";
+
+// Loading Spinner Component based on Figma design
+const LoadingSpinner = ({ size = 39, className = "" }: { size?: number; className?: string }) => {
+  const [currentVariant, setCurrentVariant] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentVariant((prev) => (prev + 1) % 5);
+    }, 200);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const dotPositions = [
+    { top: '1.53%', right: '0%', bottom: '50%', left: '58.22%' }, // Default
+    { top: '1.33%', right: '0.01%', bottom: '50.56%', left: '57.68%' }, // Variant2
+    { top: '66.26%', right: '37.23%', bottom: '0%', left: '6.27%' }, // Variant3
+    { top: '26.62%', right: '72.48%', bottom: '12.88%', left: '0%' }, // Variant4
+    { top: '0%', right: '19.03%', bottom: '76.34%', left: '19.54%' }, // Variant5
+  ];
+
+  return (
+    <div 
+      className={`relative ${className}`} 
+      style={{ width: size, height: size }}
+    >
+      {/* Background circle */}
+      <div className="absolute inset-0 border border-gray-300 rounded-full opacity-20"></div>
+      
+      {/* Animated dots */}
+      {dotPositions.map((position, index) => (
+        <div
+          key={index}
+          className={`absolute w-2 h-2 rounded-full transition-opacity duration-200 ${
+            currentVariant === index ? 'bg-blue-600 opacity-100' : 'bg-gray-400 opacity-30'
+          }`}
+          style={{
+            top: position.top,
+            right: position.right,
+            bottom: position.bottom,
+            left: position.left,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+interface Service {
+  id: string;
+  name: string;
+  selected: boolean;
+}
+
+interface Transaction {
+  id: string;
+  amount: string;
+}
 
 interface VirtualAccount {
   accountNumber: string;
   bankName: string;
+  accountName?: string;
   amount: number;
 }
 
@@ -18,44 +77,74 @@ interface PaymentData {
 }
 
 export default function Home() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState({
-    username: "",
-    amount: "",
-    email: "",
-    fullName: "",
-    phoneNumber: ""
-  });
+  const [services, setServices] = useState<Service[]>([
+    { id: "zora", name: "Zora", selected: false },
+    { id: "base", name: "Base app", selected: false },
+    { id: "wallet", name: "Wallet", selected: false },
+  ]);
+
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    { id: "1", amount: "200" },
+    { id: "2", amount: "400" },
+    { id: "3", amount: "500" },
+    { id: "4", amount: "800" },
+    { id: "5", amount: "1000" },
+    { id: "6", amount: "1600" },
+  ]);
+
+  // Core form data
+  const [recipientAddress, setRecipientAddress] = useState("0x1234567890123456789012345678901234567890");
+  const [email, setEmail] = useState("");
+  const [selectedService, setSelectedService] = useState("");
+  const [username, setUsername] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [customAmount, setCustomAmount] = useState("500");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Validation states
   const [isValidatingUsername, setIsValidatingUsername] = useState(false);
-  const [isUsernameValid, setIsUsernameValid] = useState(false);
+  const [isUsernameValid, setIsUsernameValid] = useState<boolean | null>(null);
   const [zoraAddress, setZoraAddress] = useState<string>("");
-  const [showSummary, setShowSummary] = useState(false);
+  const [validationTimeout, setValidationTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // UI state
+  const [showASAPInterface, setShowASAPInterface] = useState(false);
+
+  // Payment states
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
-  const [timeLeft, setTimeLeft] = useState(900); // 15 minutes in seconds
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('pending');
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(900); // 15 minutes
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  // Amount presets based on Figma design
+  const amountPresets = [
+    "200", "400", "500",
+    "1000", "1200", "1600"
+  ];
+
+  const [selectedPresetAmount, setSelectedPresetAmount] = useState<string>("");
+
+  const handlePresetAmountSelect = (amount: string) => {
+    setSelectedPresetAmount(amount);
+    setCustomAmount(amount);
+  };
+
+  const getCurrentAmount = () => {
+    return customAmount || selectedPresetAmount || "500";
   };
 
   const validateZoraUsername = async (username: string) => {
     if (!username) {
-      setIsUsernameValid(false);
+      setIsUsernameValid(null);
+      setZoraAddress("");
       return;
     }
 
     setIsValidatingUsername(true);
     try {
-      const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://zora-onramp-backend-production.up.railway.app').replace(/\/$/, '');
-      const apiUrl = `${baseUrl}/api/zora/resolve/${encodeURIComponent(username)}`;
-      console.log('Constructed API URL:', apiUrl);
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`https://zora-onramp-backend.onrender.com/api/zora/validate/${encodeURIComponent(username)}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -65,248 +154,208 @@ export default function Home() {
       if (!response.ok) {
         console.error('Username validation failed:', response.status);
         setIsUsernameValid(false);
+        setZoraAddress("");
         return;
       }
       
       const data = await response.json();
-      setIsUsernameValid(data.success);
-      if (data.success && data.address) {
+      console.log('Validation response:', data);
+      
+      setIsUsernameValid(data.isValid);
+      if (data.isValid && data.address) {
         setZoraAddress(data.address);
+      } else {
+        setZoraAddress("");
       }
     } catch (error) {
       console.error('Error validating username:', error);
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        console.error('CORS Error: Backend may not be configured to allow requests from this origin');
-        console.error('Current origin:', window.location.origin);
-        console.error('Expected origin by backend: https://zora-onramp-frontend.vercel.app');
-      }
       setIsUsernameValid(false);
+      setZoraAddress("");
     } finally {
       setIsValidatingUsername(false);
     }
   };
 
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const username = e.target.value;
-    setFormData({
-      ...formData,
-      username
-    });
+    const newUsername = e.target.value;
+    setUsername(newUsername);
     
-    // Debounce validation
-    setTimeout(() => {
-      validateZoraUsername(username);
+    // Clear previous timeout
+    if (validationTimeout) {
+      clearTimeout(validationTimeout);
+    }
+    
+    // Set new timeout for debounced validation
+    const timeout = setTimeout(() => {
+      validateZoraUsername(newUsername);
     }, 500);
+    
+    setValidationTimeout(timeout);
   };
 
-  const nextStep = () => {
-    if (currentStep < 3) {
-      // Validate current step before proceeding
-      if (currentStep === 1) {
-        if (!formData.username || !formData.amount || !isUsernameValid) return;
-      } else if (currentStep === 2) {
-        if (!formData.email || !formData.fullName) return;
-      } else if (currentStep === 3) {
-        if (!formData.phoneNumber) return;
-        // Show summary when moving from step 3
-        setShowSummary(true);
-        return;
-      }
-      setCurrentStep(currentStep + 1);
+  const handleServiceSelect = (serviceId: string) => {
+    setSelectedService(serviceId);
+    setUsername("");
+    setWalletAddress("");
+    setIsUsernameValid(null);
+    setZoraAddress("");
+  };
+
+  const getInputLabel = () => {
+    switch (selectedService) {
+      case "zora": return "Zora Username";
+      case "baseapp": return "Wallet Address";
+      case "wallet": return "Wallet Address";
+      default: return "Recipient Address";
     }
   };
 
-  const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
+  const getInputValue = () => {
+    switch (selectedService) {
+      case "zora": return username;
+      case "baseapp": case "wallet": return walletAddress;
+      default: return walletAddress; // Allow typing even when no service is selected
+    }
   };
 
-  const handleSubmit = async () => {
+  const getInputPlaceholder = () => {
+    switch (selectedService) {
+      case "zora": return "Enter Zora username";
+      case "baseapp": return "Enter wallet address";
+      case "wallet": return "Enter wallet address";
+      default: return "Enter wallet address or select a service";
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    
+    if (selectedService === "zora") {
+      handleUsernameChange(e);
+    } else {
+      // Handle wallet address for all other cases (baseapp, wallet, or no service selected)
+      setWalletAddress(value);
+    }
+  };
+
+  const isFormValid = () => {
+    const hasValidInput = selectedService === "zora" ? (username && isUsernameValid) : walletAddress;
+    const hasValidAmount = getCurrentAmount() && parseFloat(getCurrentAmount()) >= 200 && parseFloat(getCurrentAmount()) <= 1600;
+    const hasValidEmail = email && email.includes("@");
+    return hasValidInput && hasValidAmount && hasValidEmail && selectedService;
+  };
+
+  const handleCreateOrder = async () => {
+    if (!isFormValid()) return;
+    
     setIsCreatingOrder(true);
     try {
-      // Call backend to create order
-      const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://zora-onramp-backend-production.up.railway.app').replace(/\/$/, '');
-      const response = await fetch(`${baseUrl}/api/orders/create`, {
+      const orderData = {
+        serviceType: selectedService,
+        amountNGN: parseFloat(getCurrentAmount() || "0"),
+        email: email,
+        ...(selectedService === "zora" 
+          ? { username: username }
+          : { walletAddress: getInputValue() }
+        )
+      };
+
+      console.log('Creating order with data:', orderData);
+
+      const response = await fetch('https://zora-onramp-backend.onrender.com/api/orders/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          username: formData.username, // Send username instead of address
-          amountNGN: parseFloat(formData.amount),
-          email: formData.email,
-        }),
+        body: JSON.stringify(orderData),
       });
-      
+
       if (!response.ok) {
-        console.error('Order creation failed:', response.status);
-        return;
+        const errorText = await response.text();
+        console.error('Order creation failed:', response.status, errorText);
+        throw new Error(`Order creation failed: ${response.status}`);
       }
+
+      const result = await response.json();
+      console.log('Order created successfully:', result);
       
-      const data = await response.json();
-      if (data.success) {
-        setPaymentData(data.order);
-        setCurrentStep(4); // Move to payment step
-        setTimeLeft(900); // Reset countdown
+      if (result.success && result.order) {
+        setPaymentData(result.order);
+        setShowPaymentModal(true);
+        setPaymentStatus('pending');
+      } else {
+        throw new Error('Order creation failed');
       }
     } catch (error) {
       console.error('Error creating order:', error);
+      alert('Failed to create order. Please try again.');
     } finally {
       setIsCreatingOrder(false);
     }
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setCurrentStep(1);
-    setFormData({
-      username: "",
-      amount: "",
-      email: "",
-      fullName: "",
-      phoneNumber: ""
-    });
-    setIsUsernameValid(false);
-    setIsValidatingUsername(false);
-    setZoraAddress("");
-    setShowSummary(false);
-    setPaymentData(null);
-    setTimeLeft(900);
-    setPaymentStatus('pending');
-    setIsCreatingOrder(false);
-  };
-
-  // Countdown timer effect
-  useEffect(() => {
-    if (currentStep === 4 && timeLeft > 0) {
-      const timer = setTimeout(() => {
-        setTimeLeft(timeLeft - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [currentStep, timeLeft]);
-
-
-  // Payment status polling effect - start immediately and silently
-  useEffect(() => {
-    if (currentStep === 4 && paymentData && paymentStatus === 'pending') {
-      // Start polling immediately, no delay
-      const intervalId = setInterval(() => {
-        checkPaymentStatus(paymentData.orderId);
-      }, 3000); // Check every 3 seconds
-
-      return () => {
-        clearInterval(intervalId);
-      };
-    }
-  }, [currentStep, paymentData, paymentStatus]);
-
-  // Additional polling for processing state - in case backend gets stuck
-  useEffect(() => {
-    if (currentStep === 4 && paymentData && paymentStatus === 'processing') {
-      console.log('Starting additional polling for processing state');
-      const intervalId = setInterval(() => {
-        console.log('Polling while processing...');
-        checkPaymentStatus(paymentData.orderId);
-      }, 5000); // Check every 5 seconds when processing
-
-      // Timeout after 2 minutes of processing
-      const timeoutId = setTimeout(() => {
-        console.log('Processing timeout reached, checking final status');
-        checkPaymentStatus(paymentData.orderId);
-      }, 120000); // 2 minutes timeout
-
-      return () => {
-        clearInterval(intervalId);
-        clearTimeout(timeoutId);
-      };
-    }
-  }, [currentStep, paymentData, paymentStatus]);
-
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
   const checkPaymentStatus = async (orderId: string) => {
     try {
-      const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://zora-onramp-backend-production.up.railway.app').replace(/\/$/, '');
-      const response = await fetch(`${baseUrl}/api/orders/${orderId}`, {
+      setIsCheckingPayment(true);
+      setPaymentStatus('processing');
+      const response = await fetch(`https://zora-onramp-backend.onrender.com/api/orders/${orderId}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       });
-      
+
       if (!response.ok) {
-        console.error('API response not ok:', response.status, response.statusText);
-        return;
+        throw new Error(`Payment check failed: ${response.status}`);
       }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('Response is not JSON:', contentType);
-        const text = await response.text();
-        console.error('Response text:', text.substring(0, 200));
-        return;
-      }
-      
+
       const data = await response.json();
       console.log('Payment status response:', data);
-      console.log('Full order object:', JSON.stringify(data.order, null, 2));
       
       if (data.success && data.order) {
-        console.log('Order status check:', {
-          status: data.order.status,
-          fulfilled: data.order.fulfilled,
-          releaseTxHash: data.order.releaseTxHash,
-          createTxHash: data.order.createTxHash,
-          recipientAddress: data.order.recipientAddress
-        });
+        const orderStatus = data.order.status;
         
-        console.log('Setting payment status to:', data.order.status);
-        
-        if (data.order.status === 'completed' || data.order.status === 'confirmed') {
-          console.log('Status is completed/confirmed, setting to completed');
+        if (orderStatus === 'completed' || orderStatus === 'confirmed') {
           setPaymentStatus('completed');
-        } else if (data.order.status === 'failed') {
-          console.log('Status is failed, setting to failed');
+        } else if (orderStatus === 'failed' || orderStatus === 'expired') {
           setPaymentStatus('failed');
-        } else if (data.order.status === 'pending') {
-          console.log('Status is pending, setting to pending');
+        } else if (orderStatus === 'pending') {
           setPaymentStatus('pending');
         } else {
-          console.log('Unknown status, setting to processing');
-          // Default to processing for any other status
           setPaymentStatus('processing');
         }
       }
     } catch (error) {
       console.error('Error checking payment status:', error);
+      setPaymentStatus('failed');
+    } finally {
+      setIsCheckingPayment(false);
     }
   };
 
   const verifyPaymentManually = async (orderId: string) => {
     try {
-      const baseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://zora-onramp-backend-production.up.railway.app').replace(/\/$/, '');
-      const response = await fetch(`${baseUrl}/api/orders/${orderId}/verify-payment`, {
+      setPaymentStatus('processing');
+      const response = await fetch(`https://zora-onramp-backend.onrender.com/api/orders/${orderId}/verify-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       });
-      
+
       if (!response.ok) {
-        console.error('Manual verification failed:', response.status);
-        return;
+        throw new Error(`Payment verification failed: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log('Manual verification response:', data);
       
       if (data.success && data.order) {
-        if (data.order.status === 'completed' || data.order.status === 'confirmed') {
+        const orderStatus = data.order.status;
+        
+        if (orderStatus === 'completed' || orderStatus === 'confirmed') {
           setPaymentStatus('completed');
-        } else if (data.order.status === 'failed') {
+        } else if (orderStatus === 'failed' || orderStatus === 'expired') {
           setPaymentStatus('failed');
         } else {
           setPaymentStatus('processing');
@@ -314,489 +363,649 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error with manual verification:', error);
+      setPaymentStatus('failed');
     }
   };
-  return (
-    <div className="min-h-screen bg-white dark:bg-black relative overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Floating Circles with More Pronounced Motion */}
-        <div
-          className="absolute top-20 left-10 w-32 h-32 bg-gray-600 dark:bg-gray-400 rounded-full opacity-60 animate-pulse"
-          style={{ animationDuration: "2s" }}
-        ></div>
-        <div
-          className="absolute top-40 right-20 w-24 h-24 bg-gray-700 dark:bg-gray-300 rounded-full opacity-70 animate-bounce"
-          style={{ animationDuration: "2s" }}
-        ></div>
-        <div
-          className="absolute bottom-27 left-1/4 w-16 h-16 bg-gray-800 dark:bg-gray-200 rounded-full opacity-65 animate-pulse"
-          style={{ animationDelay: "0.5s", animationDuration: "1.5s" }}
-        ></div>
-        <div
-          className="absolute bottom-20 right-1/3 w-20 h-20 bg-gray-600 dark:bg-gray-400 rounded-full opacity-60 animate-bounce"
-          style={{ animationDuration: "2.5s", animationDelay: "1s" }}
-        ></div>
 
-        {/* Additional Moving Elements */}
-        <div
-          className="absolute top-1/2 left-1/3 w-12 h-12 bg-gray-700 dark:bg-gray-300 rounded-full opacity-55 animate-pulse"
-          style={{ animationDuration: "3s", animationDelay: "1.5s" }}
-        ></div>
-        <div
-          className="absolute top-1/3 right-1/4 w-28 h-28 bg-gray-500 dark:bg-gray-500 rounded-full opacity-50 animate-bounce"
-          style={{ animationDuration: "4s", animationDelay: "0.8s" }}
-        ></div>
+  // Timer effect for payment countdown
+  useEffect(() => {
+    if (showPaymentModal && paymentStatus === 'pending' && timeLeft > 0) {
+      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showPaymentModal, paymentStatus, timeLeft]);
 
-        {/* Animated Grid Pattern */}
-        <div className="absolute inset-0 opacity-10 dark:opacity-20">
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (validationTimeout) {
+        clearTimeout(validationTimeout);
+      }
+    };
+  }, [validationTimeout]);
+
+  const filteredServices = services.filter((service) =>
+    service.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Render landing page if ASAP interface is not shown
+  if (!showASAPInterface) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-black relative overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Floating Circles with More Pronounced Motion */}
           <div
-            className="absolute inset-0 animate-pulse"
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.3) 1px, transparent 0)",
-              backgroundSize: "25px 25px",
-              animationDuration: "4s",
-            }}
+            className="absolute top-20 left-10 w-32 h-32 bg-gray-600 dark:bg-gray-400 rounded-full opacity-60 animate-pulse"
+            style={{ animationDuration: "2s" }}
+          ></div>
+          <div
+            className="absolute top-40 right-20 w-24 h-24 bg-gray-700 dark:bg-gray-300 rounded-full opacity-70 animate-bounce"
+            style={{ animationDuration: "2s" }}
+          ></div>
+          <div
+            className="absolute bottom-27 left-1/4 w-16 h-16 bg-gray-800 dark:bg-gray-200 rounded-full opacity-65 animate-pulse"
+            style={{ animationDelay: "0.5s", animationDuration: "1.5s" }}
+          ></div>
+          <div
+            className="absolute bottom-20 right-1/3 w-20 h-20 bg-gray-600 dark:bg-gray-400 rounded-full opacity-60 animate-bounce"
+            style={{ animationDuration: "2.5s", animationDelay: "1s" }}
+          ></div>
+
+          {/* Additional Moving Elements */}
+          <div
+            className="absolute top-1/2 left-1/3 w-12 h-12 bg-gray-700 dark:bg-gray-300 rounded-full opacity-55 animate-pulse"
+            style={{ animationDuration: "3s", animationDelay: "1.5s" }}
+          ></div>
+          <div
+            className="absolute top-1/3 right-1/4 w-28 h-28 bg-gray-500 dark:bg-gray-500 rounded-full opacity-50 animate-bounce"
+            style={{ animationDuration: "4s", animationDelay: "0.8s" }}
+          ></div>
+
+          {/* Animated Grid Pattern */}
+          <div className="absolute inset-0 opacity-10 dark:opacity-20">
+            <div
+              className="absolute inset-0 animate-pulse"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.3) 1px, transparent 0)",
+                backgroundSize: "25px 25px",
+                animationDuration: "4s",
+              }}
+            ></div>
+          </div>
+
+          {/* Floating Lines */}
+          <div
+            className="absolute bottom-1/3 right-0 w-px h-32 bg-gray-600 dark:bg-gray-400 opacity-50 animate-pulse"
+            style={{ animationDuration: "2.5s", animationDelay: "1.2s" }}
           ></div>
         </div>
 
-        {/* Floating Lines */}
-        <div
-          className="absolute bottom-1/3 right-0 w-px h-32 bg-gray-600 dark:bg-gray-400 opacity-50 animate-pulse"
-          style={{ animationDuration: "2.5s", animationDelay: "1.2s" }}
-        ></div>
-      </div>
-      {/* Hero Section */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-32">
-        <div className="text-center">
-          {/* Simple Logo */}
-          <div className="mb-8 sm:mb-12">
-            <div
-              className="inline-block w-10 h-10 sm:w-12 sm:h-12 border-2 border-black dark:border-white rounded-sm flex items-center justify-center hover:scale-110 hover:rotate-3 hover:border-blue-500 dark:hover:border-blue-400 transition-all duration-500 animate-pulse"
-              style={{ animationDuration: "3s" }}
-            >
-              <span className="text-lg sm:text-xl font-light hover:text-blue-500 dark:hover:text-blue-400 transition-colors duration-300">
-                Z
-              </span>
+        {/* Hero Section */}
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-24 md:py-32">
+          <div className="text-center">
+            {/* Simple Logo */}
+            <div className="mb-8 sm:mb-12">
+              <div
+                className="w-10 h-10 sm:w-12 sm:h-12 border-2 border-black dark:border-white rounded-sm flex items-center justify-center hover:scale-110 hover:rotate-3 hover:border-blue-500 dark:hover:border-blue-400 transition-all duration-500 animate-pulse mx-auto"
+                style={{ animationDuration: "3s" }}
+              >
+                <span className="text-lg sm:text-xl font-light hover:text-blue-500 dark:hover:text-blue-400 transition-colors duration-300">
+                  A
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Main Content */}
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-light tracking-wide text-black dark:text-white mb-4 sm:mb-6 px-2">
-            Zora Onramp
-          </h1>
+            {/* Main Content */}
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-light tracking-wide text-black dark:text-white mb-4 sm:mb-6 px-2">
+             Asap
+            </h1>
 
-          <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 mb-8 sm:mb-12 max-w-2xl mx-auto font-light leading-relaxed px-4">
-            Convert Nigerian Naira to USDC for the Zora ecosystem
-          </p>
+            <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 mb-8 sm:mb-12 max-w-2xl mx-auto font-light leading-relaxed px-4">
+              Convert Nigerian Naira to USDC for the Base ecosystem
+            </p>
 
             {/* Fund Zora Button */}
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => setShowASAPInterface(true)}
               className="inline-block px-6 py-3 sm:px-8 sm:py-4 border border-gray-300 dark:border-gray-700 text-sm sm:text-base text-gray-700 dark:text-gray-300 font-light hover:border-gray-400 dark:hover:border-gray-600 transition-colors duration-300"
             >
               Fund Zora
             </button>
-        </div>
-      </div>
-
-      {/* Features */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 pb-16 sm:pb-24">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-12 lg:gap-16">
-          <div className="text-center border-2 border-gray-300 dark:border-gray-700 py-6 sm:py-8 px-4 sm:px-6 hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-lg transition-all duration-500 group">
-            <div className="mb-3 sm:mb-4 flex justify-center">
-              <Globe className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 dark:text-gray-400" />
-            </div>
-            <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
-              Naira Support
-            </h3>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">
-              Direct conversion from Nigerian Naira to USDC
-            </p>
-          </div>
-
-          <div className="text-center border-2 border-gray-300 dark:border-gray-700 py-6 sm:py-8 px-4 sm:px-6 hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-lg transition-all duration-500 group">
-            <div className="mb-3 sm:mb-4 flex justify-center">
-              <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 dark:text-gray-400" />
-            </div>
-            <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
-              Fast & Secure
-            </h3>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">
-              Blockchain-powered secure transactions
-            </p>
-          </div>
-
-          <div className="text-center border-2 border-gray-300 dark:border-gray-700 py-6 sm:py-8 px-4 sm:px-6 hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-lg transition-all duration-500 group sm:col-span-2 lg:col-span-1">
-            <div className="mb-3 sm:mb-4 flex justify-center">
-              <Palette className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 dark:text-gray-400" />
-            </div>
-            <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
-              Creator Economy
-            </h3>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">
-              Get USDC to trade tokenized content and support creators on Zora&apos;s decentralized platform
-            </p>
           </div>
         </div>
-      </div>
 
-      {/* Footer */}
-      <div className="border-t border-gray-200 dark:border-gray-800 py-8">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <p className="text-xs text-gray-500 dark:text-gray-500 font-light">
-            Empowering Nigerian creators in the global creator economy
-          </p>
-        </div>
-      </div>
-
-      {/* Multi-step Form Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-2 sm:p-4">
-          <div className="bg-white dark:bg-black border border-gray-300 dark:border-gray-700 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 md:p-8">
-              <h2 className="text-lg sm:text-xl font-light text-black dark:text-white">
-                Fund Zora
-              </h2>
-              <button
-                onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        {/* Features */}
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pb-16 sm:pb-24">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-12 lg:gap-16">
+            <div className="text-center border-2 border-gray-300 dark:border-gray-700 py-6 sm:py-8 px-4 sm:px-6 hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-lg transition-all duration-500 group">
+              <div className="mb-3 sm:mb-4 flex justify-center">
+                <Globe className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 dark:text-gray-400" />
+              </div>
+              <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
+                Naira Support
+              </h3>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">
+                Direct conversion from Nigerian Naira to USDC
+              </p>
             </div>
 
-            {/* Progress Indicator */}
-            <div className="flex items-center justify-center pb-4 sm:pb-6 md:pb-8">
-              <div className="flex items-center space-x-2 sm:space-x-4">
-                {[1, 2, 3, 4].map((step) => (
-                  <div key={step} className="flex items-center">
-                    <div
-                      className={`w-5 h-5 sm:w-6 sm:h-6 border-2 flex items-center justify-center text-xs font-light ${
-                        step <= currentStep
-                          ? "border-black dark:border-white text-black dark:text-white"
-                          : "border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500"
-                      }`}
-                    >
-                      {step}
+            <div className="text-center border-2 border-gray-300 dark:border-gray-700 py-6 sm:py-8 px-4 sm:px-6 hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-lg transition-all duration-500 group">
+              <div className="mb-3 sm:mb-4 flex justify-center">
+                <Zap className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 dark:text-gray-400" />
+              </div>
+              <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
+                Fast & Secure
+              </h3>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">
+                Blockchain-powered secure transactions
+              </p>
+            </div>
+
+            <div className="text-center border-2 border-gray-300 dark:border-gray-700 py-6 sm:py-8 px-4 sm:px-6 hover:border-gray-400 dark:hover:border-gray-600 hover:shadow-lg transition-all duration-500 group sm:col-span-2 lg:col-span-1">
+              <div className="mb-3 sm:mb-4 flex justify-center">
+                <Palette className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 dark:text-gray-400" />
+              </div>
+              <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
+                Creator Economy
+              </h3>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-light leading-relaxed">
+                Get USDC to trade tokenized content and support creators on Zora&apos;s decentralized platform
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 dark:border-gray-800 py-8">
+          <div className="max-w-4xl mx-auto px-6 text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-500 font-light">
+              Empowering Nigerian creators in the global creator economy
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600 relative overflow-hidden">
+      {/* Background Decorative Circles - Responsive */}
+      <div className="absolute -left-4 sm:-left-8 top-6 sm:top-12 w-32 sm:w-64 lg:w-[816px] h-32 sm:h-64 lg:h-[816px] rounded-full bg-white/10"></div>
+      <div className="absolute right-1/4 bottom-1/4 w-32 sm:w-64 lg:w-[816px] h-32 sm:h-64 lg:h-[816px] rounded-full bg-white/10"></div>
+      <div className="absolute right-1/3 -top-16 sm:-top-32 w-32 sm:w-64 lg:w-[816px] h-32 sm:h-64 lg:h-[816px] rounded-full bg-white/10"></div>
+      
+      {/* Header Section - Responsive */}
+      <div className="relative z-20 flex items-center justify-between p-4 sm:p-6">
+        {/* Back Button */}
+        <button
+          onClick={() => setShowASAPInterface(false)}
+          className="flex items-center gap-2 text-white hover:text-gray-200 transition-colors duration-200"
+        >
+          <X className="w-5 h-5" />
+          <span className="text-sm font-medium">Back</span>
+        </button>
+        
+        {/* Lightning Icon */}
+        <div className="w-12 sm:w-16 lg:w-24 h-12 sm:h-16 lg:h-24">
+          <div className="bg-yellow-400 rounded-lg p-2 sm:p-3 w-fit">
+            <Zap className="w-6 sm:w-8 lg:w-12 h-6 sm:h-8 lg:h-12 text-blue-600 fill-current" />
+          </div>
+        </div>
+        
+        {/* ASAP Title */}
+        <h1 className="text-white font-bold text-2xl sm:text-4xl lg:text-6xl">ASAP</h1>
+      </div>
+
+      {/* Main Content Layout - Mobile First */}
+      <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4 sm:space-y-6">
+        
+        {/* Select Section - Full Width */}
+        <div className="bg-gray-300 border-2 sm:border-4 border-white rounded-lg shadow-lg relative">
+          <div className="absolute inset-0 rounded-lg shadow-inner" style={{boxShadow: 'inset 8px 8px 8px rgba(0,0,0,0.25)'}}>
+          </div>
+          <div className="relative z-10">
+            {/* Select Header */}
+            <div className="bg-blue-700 text-white p-3 sm:p-4 rounded-t-lg">
+              <h2 className="font-semibold text-base sm:text-lg lg:text-xl" style={{fontFamily: 'Roboto Mono, monospace'}}>Select</h2>
+            </div>
+            
+            {/* Search Bar */}
+            <div className="bg-white mx-3 sm:mx-6 mt-3 sm:mt-6 mb-3 sm:mb-4 p-3 rounded border-black border-2" style={{boxShadow: 'inset 4px 4px 8px rgba(0,0,0,0.25)'}}>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-transparent text-gray-500 text-lg sm:text-xl lg:text-2xl font-medium outline-none"
+                style={{fontFamily: 'Roboto Mono, monospace'}}
+              />
+            </div>
+
+            {/* Services Table - Responsive */}
+            <div className="mx-3 sm:mx-6 mb-3 sm:mb-4 bg-white border-2 border-black max-h-64 sm:max-h-80 overflow-y-auto" style={{boxShadow: 'inset 8px 8px 8px rgba(0,0,0,0.25)'}}>
+              {/* Table Header */}
+              <div className="grid grid-cols-2 border-b-2 border-gray-300 sticky top-0 bg-white z-10">
+                <div className="bg-gray-300 p-2 sm:p-4 border-r border-black text-center" style={{boxShadow: 'inset 6px 6px 3px rgba(0,0,0,0.25)'}}>
+                  <span className="font-medium text-sm sm:text-base lg:text-lg text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>Selection</span>
+                </div>
+                <div className="bg-gray-300 p-2 sm:p-4 text-center" style={{boxShadow: 'inset 6px 6px 3px rgba(0,0,0,0.25)'}}>
+                  <span className="font-medium text-sm sm:text-base lg:text-lg text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>Services</span>
+                </div>
+              </div>
+              
+              {/* Services List */}
+              <div className="divide-y-2 divide-gray-300">
+                {['Zora', 'Base app', 'Wallet'].map((serviceName, index) => (
+                  <div key={serviceName} className="grid grid-cols-2 min-h-[60px] sm:min-h-[80px] lg:min-h-[100px] border-b-2 border-gray-300 last:border-b-0">
+                    <div className="flex items-center justify-center border-r-2 border-gray-300 p-2">
+                      <button
+                        onClick={() => handleServiceSelect(serviceName === 'Base app' ? 'baseapp' : serviceName.toLowerCase())}
+                        className="w-10 sm:w-12 lg:w-16 h-10 sm:h-12 lg:h-16 bg-white border-2 border-black rounded shadow-lg relative min-w-[44px] min-h-[44px]"
+                        style={{boxShadow: '2.5px 2.5px 1.3px rgba(0,0,0,0.25)'}}
+                      >
+                        <div className="absolute inset-[11%] bg-white rounded shadow-inner" 
+                             style={{boxShadow: selectedService === (serviceName === 'Base app' ? 'baseapp' : serviceName.toLowerCase()) ? 'inset 1.4px 1.4px 0.7px rgba(0,0,0,0.25)' : '0px 1px 1px rgba(0,0,0,0.25)'}}>
+                          {selectedService === (serviceName === 'Base app' ? 'baseapp' : serviceName.toLowerCase()) && (
+                            <div className="w-full h-full bg-blue-600 rounded"></div>
+                          )}
+                        </div>
+                      </button>
                     </div>
-                    {step < 4 && (
-                      <div
-                        className={`w-4 sm:w-6 h-px ${
-                          step < currentStep
-                            ? "bg-black dark:bg-white"
-                            : "bg-gray-300 dark:bg-gray-600"
-                        }`}
-                      />
-                    )}
+                    <div className="flex items-center pl-4 sm:pl-6 lg:pl-8">
+                      <span className="text-base sm:text-lg lg:text-2xl font-medium text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                        {serviceName}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        </div>
 
-            {/* Form Content */}
-            <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8">
-              {currentStep === 1 && (
-                <div className="space-y-4 sm:space-y-6">
-                  <div>
-                    <label className="block text-sm font-light text-gray-600 dark:text-gray-400 mb-2">
-                      Zora Username
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        name="username"
-                        value={formData.username}
-                        onChange={handleUsernameChange}
-                        placeholder="Enter Zora username"
-                        className="w-full px-3 sm:px-4 py-2 sm:py-3 pr-8 sm:pr-10 border border-gray-300 dark:border-gray-600 bg-transparent text-black dark:text-white font-light focus:outline-none focus:border-black dark:focus:border-white transition-colors duration-200 text-sm sm:text-base"
-                      />
-                      {isValidatingUsername && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="w-4 h-4 border-2 border-gray-300 border-t-black dark:border-t-white rounded-full animate-spin"></div>
-                        </div>
-                      )}
-                      {!isValidatingUsername && isUsernameValid && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <Check className="w-4 h-4 text-green-500" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-light text-gray-600 dark:text-gray-400 mb-2">
-                      Amount (NGN)
-                    </label>
-                    <input
-                      type="number"
-                      name="amount"
-                      value={formData.amount}
-                      onChange={handleInputChange}
-                      placeholder="Enter amount in Naira"
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-transparent text-black dark:text-white font-light focus:outline-none focus:border-black dark:focus:border-white transition-colors duration-200"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {currentStep === 2 && (
-                <div className="space-y-4 sm:space-y-6">
-                  <div>
-                    <label className="block text-sm font-light text-gray-600 dark:text-gray-400 mb-2">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      placeholder="Enter your email"
-                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 dark:border-gray-600 bg-transparent text-black dark:text-white font-light focus:outline-none focus:border-black dark:focus:border-white transition-colors duration-200 text-sm sm:text-base"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-light text-gray-600 dark:text-gray-400 mb-2">
-                      Full Name
-                    </label>
+        {/* Bottom Row - Responsive Layout */}
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+          
+          {/* Transactions Section */}
+          <div className="w-full lg:w-1/2 bg-gray-300 border-2 sm:border-4 border-white rounded-lg shadow-lg relative">
+            <div className="absolute inset-0 rounded-lg" style={{boxShadow: 'inset -4px -4px 4px rgba(0,0,0,0.25), inset 4px 4px 4px rgba(0,0,0,0.25)'}}>
+            </div>
+            <div className="relative z-10 h-full max-h-[70vh] flex flex-col">
+              {/* Transactions Header */}
+              <div className="bg-blue-700 text-white p-3 sm:p-4 rounded-t-lg">
+                <h2 className="font-semibold text-base sm:text-lg" style={{fontFamily: 'Roboto Mono, monospace'}}>Transactions</h2>
+              </div>
+              
+              <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
+                {/* Recipient Address */}
+                <div>
+                  <label className="block text-sm font-medium text-black mb-2" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                    {getInputLabel()}
+                  </label>
+                  <div className="relative">
                     <input
                       type="text"
-                      name="fullName"
-                      value={formData.fullName}
+                      id="recipient-input"
+                      value={getInputValue()}
                       onChange={handleInputChange}
-                      placeholder="Enter your full name"
-                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 dark:border-gray-600 bg-transparent text-black dark:text-white font-light focus:outline-none focus:border-black dark:focus:border-white transition-colors duration-200 text-sm sm:text-base"
+                      placeholder={getInputPlaceholder()}
+                      aria-label={getInputLabel()}
+                      className="w-full p-3 border-2 border-black rounded bg-white text-black text-sm sm:text-base"
+                      style={{
+                        boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.25)',
+                        fontFamily: 'Roboto Mono, monospace',
+                        minHeight: '44px'
+                      }}
                     />
+                    {selectedService === "zora" && isValidatingUsername && (
+                      <div className="absolute right-3 top-3">
+                        <LoadingSpinner size={20} />
+                      </div>
+                    )}
+                    {selectedService === "zora" && isUsernameValid !== null && (
+                      <div className="absolute right-3 top-3">
+                        {isUsernameValid ? (
+                          <Check className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <X className="w-5 h-5 text-red-500" />
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
 
-              {currentStep === 3 && (
-                <div className="space-y-4 sm:space-y-6">
-                  <div>
-                    <label className="block text-sm font-light text-gray-600 dark:text-gray-400 mb-2">
-                      Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      name="phoneNumber"
-                      value={formData.phoneNumber}
-                      onChange={handleInputChange}
-                      placeholder="Enter your phone number"
-                      className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 dark:border-gray-600 bg-transparent text-black dark:text-white font-light focus:outline-none focus:border-black dark:focus:border-white transition-colors duration-200 text-sm sm:text-base"
-                    />
+                {/* Email Input */}
+                <div>
+                  <label className="block text-sm font-medium text-black mb-2" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                    Input email
+                  </label>
+                  <input
+                    type="email"
+                    id="email-input"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    aria-label="Email address"
+                    className="w-full p-3 border-2 border-black rounded bg-white text-black text-sm sm:text-base"
+                    style={{
+                      boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.25)',
+                      fontFamily: 'Roboto Mono, monospace',
+                      minHeight: '44px'
+                    }}
+                  />
+                </div>
+
+                {/* Amount Input */}
+                <div>
+                  <label className="block text-sm font-medium text-black mb-2" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                    AMOUNT (NGN)
+                  </label>
+                  <input
+                    type="number"
+                    id="amount-input"
+                    value={customAmount}
+                    onChange={(e) => {
+                      setCustomAmount(e.target.value);
+                      setSelectedPresetAmount("");
+                    }}
+                    placeholder="Enter amount in NGN"
+                    aria-label="Amount in Nigerian Naira"
+                    min="200"
+                    max="1600"
+                    className="w-full p-3 border-2 border-black rounded bg-white text-black text-sm sm:text-base"
+                    style={{
+                      boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.25)',
+                      fontFamily: 'Roboto Mono, monospace',
+                      minHeight: '44px'
+                    }}
+                  />
+                </div>
+
+                {/* Amount Preset Grid - Responsive */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {amountPresets.map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => handlePresetAmountSelect(amount)}
+                      className={`relative p-3 sm:p-4 rounded border-2 border-black bg-white shadow-lg ${
+                        selectedPresetAmount === amount ? 'bg-blue-600' : 'bg-white'
+                      } min-h-[44px]`}
+                      style={{boxShadow: '2.5px 2.5px 1.3px rgba(0,0,0,0.25)'}}
+                    >
+                      <div className="absolute top-2 sm:top-4 left-2 sm:left-3 w-4 sm:w-6 h-4 sm:h-6 bg-white border-2 border-black rounded shadow-sm"
+                           style={{boxShadow: selectedPresetAmount === amount ? '2.5px 2.5px 1.3px rgba(0,0,0,0.25)' : '0px 1px 1px rgba(0,0,0,0.25)'}}>
+                        <div className="absolute inset-[11%] bg-white rounded shadow-inner"
+                             style={{boxShadow: selectedPresetAmount === amount ? 'inset 1.4px 1.4px 0.7px rgba(0,0,0,0.25)' : '0px 1px 1px rgba(0,0,0,0.25)'}}>
+                          {selectedPresetAmount === amount && (
+                            <div className="w-full h-full bg-blue-600 rounded"></div>
+                          )}
+                        </div>
+                      </div>
+                      <div className={`text-center ${selectedPresetAmount === amount ? 'bg-blue-600 text-white' : 'bg-white text-black'} p-2 sm:p-4 rounded ml-6 sm:ml-8`}>
+                        <span className="font-medium text-xs sm:text-sm" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                          {parseInt(amount).toLocaleString()}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Section */}
+          <div className="w-full lg:w-1/2 bg-gray-300 border-2 sm:border-4 border-white rounded-lg shadow-lg relative">
+            <div className="absolute inset-0 rounded-lg" style={{boxShadow: 'inset 4px 4px 4px rgba(0,0,0,0.25)'}}>
+            </div>
+            <div className="relative z-10 h-full max-h-[70vh] flex flex-col">
+              {/* Preview Header */}
+              <div className="bg-blue-700 text-white p-3 sm:p-4 rounded-t-lg">
+                <h2 className="font-semibold text-base sm:text-lg" style={{fontFamily: 'Roboto Mono, monospace'}}>Preview</h2>
+              </div>
+              
+              <div className="bg-white m-3 sm:m-4 rounded p-3 sm:p-4 flex-1 overflow-y-auto">
+                <div className="space-y-3 sm:space-y-4">
+                  {/* Recipient Address */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Recipient Address:
+                    </span>
+                    <span className="text-xs sm:text-sm text-black break-all" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {(selectedService === "zora" ? username : walletAddress) || '0x77ybas887llikug'}
+                    </span>
                   </div>
-                  
-                  {/* Summary - only show after clicking Next */}
-                  {showSummary && (
-                    <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                      <h4 className="text-sm font-light text-black dark:text-white mb-4">Summary</h4>
-                      <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-                        <p>Username: {formData.username}</p>
-                        <p>Amount: ₦{formData.amount}</p>
-                        <p>Email: {formData.email}</p>
-                        <p>Name: {formData.fullName}</p>
-                        <p>Phone: {formData.phoneNumber}</p>
-                      </div>
+
+                  {/* Email */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Email
+                    </span>
+                    <span className="text-xs sm:text-sm text-black break-all" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {email || 'Ghostp@gmail.com'}
+                    </span>
+                  </div>
+
+                  {/* Service */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Service
+                    </span>
+                    <span className="text-xs sm:text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {selectedService || 'Zora'}
+                    </span>
+                  </div>
+
+                  {/* Amount */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Amount(ngn)
+                    </span>
+                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {parseInt(getCurrentAmount()).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {/* Fees */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Fees (ngn)
+                    </span>
+                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      70
+                    </span>
+                  </div>
+
+                  {/* Total */}
+                  <div className="pt-4 sm:pt-8">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                      <span className="font-bold text-xl sm:text-2xl text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                        TOTAL
+                      </span>
+                      <span className="font-bold text-xl sm:text-2xl text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                        {(parseInt(getCurrentAmount()) + 70).toLocaleString()}
+                      </span>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Proceed Button */}
+                  <div className="pt-4 sm:pt-8">
+                    <button
+                      onClick={handleCreateOrder}
+                      disabled={isCreatingOrder || !isFormValid()}
+                      className="w-full text-black underline font-medium text-sm hover:no-underline transition-all min-h-[44px] p-3"
+                      style={{fontFamily: 'Futura, sans-serif', textDecorationStyle: 'solid', textUnderlinePosition: 'from-font'}}
+                    >
+                      {isCreatingOrder ? 'PROCESSING...' : 'PROCEED TO PAYMENT'}
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              {currentStep === 4 && paymentData && (
-                <div className="space-y-4 sm:space-y-6">
-                  {/* Show payment details for pending state, success/failure for others */}
-                  {paymentStatus === 'pending' && (
-                    <>
-                      <div className="text-center">
-                        <h3 className="text-base sm:text-lg font-light text-black dark:text-white mb-2">
-                          Payment Details
-                        </h3>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Transfer the exact amount to the account below
-                        </p>
-                      </div>
-
-                      {/* Countdown Timer */}
-                      <div className="text-center p-3 sm:p-4 border border-gray-300 dark:border-gray-600">
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-1">Time remaining</p>
-                        <p className="text-base sm:text-lg font-light text-black dark:text-white">
-                          {formatTime(timeLeft)}
-                        </p>
-                      </div>
-
-                      {/* Payment Details */}
-                      <div className="space-y-3 sm:space-y-4">
-                        <div className="p-3 sm:p-4 border border-gray-300 dark:border-gray-600">
-                          <h4 className="text-xs sm:text-sm font-light text-black dark:text-white mb-2 sm:mb-3">Account Details</h4>
-                          <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600 dark:text-gray-400">Account Number:</span>
-                              <span className="font-light text-black dark:text-white break-all">{paymentData.virtualAccount.accountNumber}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600 dark:text-gray-400">Bank Name:</span>
-                              <span className="font-light text-black dark:text-white">{paymentData.virtualAccount.bankName}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600 dark:text-gray-400">Amount:</span>
-                              <span className="font-light text-black dark:text-white">₦{formData.amount}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600 dark:text-gray-400">USDC Amount:</span>
-                              <span className="font-light text-black dark:text-white">{paymentData.usdcAmount} USDC</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="p-3 sm:p-4 border border-gray-300 dark:border-gray-600">
-                          <h4 className="text-xs sm:text-sm font-light text-black dark:text-white mb-2 sm:mb-3">Order Information</h4>
-                          <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600 dark:text-gray-400">Order ID:</span>
-                              <span className="font-light text-black dark:text-white font-mono text-xs break-all">{paymentData.orderId}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600 dark:text-gray-400">Expires:</span>
-                              <span className="font-light text-black dark:text-white text-xs">{paymentData.expiresIn}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Silent monitoring indicator */}
-                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          We&apos;re monitoring your payment automatically
-                        </p>
-                        <button
-                          onClick={() => paymentData && verifyPaymentManually(paymentData.orderId)}
-                          className="mt-2 px-3 py-1 text-xs text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200"
-                        >
-                          Check Now
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-           {paymentStatus === 'processing' && (
-             <div className="text-center space-y-4">
-               <div className="animate-spin w-8 h-8 border-2 border-gray-300 border-t-black dark:border-t-white mx-auto"></div>
-               <h3 className="text-lg font-light text-black dark:text-white">
-                 Processing Payment
-               </h3>
-               <p className="text-sm text-gray-600 dark:text-gray-400">
-                 We&apos;re confirming your payment and releasing your USDC...
-               </p>
-               <button
-                 onClick={() => paymentData && verifyPaymentManually(paymentData.orderId)}
-                 className="px-4 py-2 text-sm text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200"
-               >
-                 Check Status Manually
-               </button>
-             </div>
-           )}
-
-                  {paymentStatus === 'completed' && (
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto">
-                        <Check className="w-8 h-8 text-green-600 dark:text-green-400" />
-                      </div>
-                      <h3 className="text-lg font-light text-black dark:text-white">
-                        Payment Successful!
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        We&apos;ve sent {paymentData.usdcAmount} USDC to your Zora account
-                      </p>
-                      <div className="p-4 border border-gray-300 dark:border-gray-600">
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">Amount Sent:</span>
-                            <span className="font-light text-black dark:text-white">{paymentData.usdcAmount} USDC</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600 dark:text-gray-400">Zora Username:</span>
-                            <span className="font-light text-black dark:text-white text-xs">{formData.username}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentStatus === 'failed' && (
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto">
-                        <X className="w-8 h-8 text-red-600 dark:text-red-400" />
-                      </div>
-                      <h3 className="text-lg font-light text-black dark:text-white">
-                        Payment Failed
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        There was an issue processing your payment. Please try again.
-                      </p>
-                    </div>
-                  )}
+                {/* Contact Support */}
+                <div className="mt-6 text-center">
+                  <p className="text-black text-sm" style={{fontFamily: 'Futura, sans-serif'}}>
+                    Need help? Contact Support
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between p-4 sm:p-6 md:p-8 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={prevStep}
-                disabled={currentStep === 1}
-                className={`flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm font-light transition-colors duration-200 ${
-                  currentStep === 1
-                    ? "text-gray-400 cursor-not-allowed"
-                    : "text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white"
-                }`}
-              >
-                <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span>Previous</span>
-              </button>
+      {/* Payment Modal */}
+      {showPaymentModal && paymentData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-white border border-black rounded-[26px] max-w-md w-full mx-3 sm:mx-0 relative max-h-[90vh] overflow-y-auto">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowPaymentModal(false)}
+              aria-label="Close payment modal"
+              className="absolute top-3 sm:top-4 right-3 sm:right-4 text-black hover:text-gray-600 transition-colors z-10 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            >
+              <X className="w-6 h-6" />
+            </button>
 
-              {currentStep < 3 ? (
-                <button
-                  onClick={nextStep}
-                  disabled={
-                    (currentStep === 1 && (!formData.username || !formData.amount || !isUsernameValid)) ||
-                    (currentStep === 2 && (!formData.email || !formData.fullName))
-                  }
-                  className={`flex items-center space-x-2 text-sm font-light transition-colors duration-200 ${
-                    (currentStep === 1 && (!formData.username || !formData.amount || !isUsernameValid)) ||
-                    (currentStep === 2 && (!formData.email || !formData.fullName))
-                      ? "text-gray-400 cursor-not-allowed"
-                      : "text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white"
-                  }`}
-                >
-                  <span>Next</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              ) : currentStep === 3 ? (
-                <button
-                  onClick={handleSubmit}
-                  disabled={!formData.phoneNumber || isCreatingOrder}
-                  className={`px-4 sm:px-6 md:px-8 py-2 sm:py-3 text-xs sm:text-sm font-light transition-colors duration-200 flex items-center space-x-1 sm:space-x-2 ${
-                    !formData.phoneNumber || isCreatingOrder
-                      ? "text-gray-400 bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
-                      : "text-white bg-black dark:bg-white dark:text-black hover:bg-gray-800 dark:hover:bg-gray-200"
-                  }`}
-                >
-                  {isCreatingOrder && (
-                    <div className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full"></div>
-                  )}
-                  <span>{isCreatingOrder ? "Creating Order..." : "Proceed to Pay"}</span>
-                </button>
-              ) : (
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  {paymentStatus === 'pending' && "Complete payment to receive USDC"}
-                  {paymentStatus === 'processing' && "Processing your payment..."}
-                  {paymentStatus === 'completed' && "Payment completed successfully!"}
-                  {paymentStatus === 'failed' && "Payment failed - please try again"}
+            {paymentStatus === 'pending' && (
+              <div className="p-4 sm:p-6 text-center">
+                {/* Transaction ID */}
+                <p className="font-mono font-medium text-base sm:text-lg text-black mb-4 sm:mb-6 break-all">
+                  Txn id: {paymentData.orderId}
+                </p>
+
+                {/* Warning Triangle Icon */}
+                <div className="flex justify-center mb-4 sm:mb-6">
+                  <div className="relative">
+                    <AlertTriangle className="w-24 h-24 sm:w-32 sm:h-32 text-gray-400 fill-gray-200" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-1 h-12 sm:h-16 bg-black rounded-full"></div>
+                    </div>
+                    <div className="absolute bottom-4 sm:bottom-6 left-1/2 transform -translate-x-1/2">
+                      <div className="w-2 h-2 bg-black rounded-full"></div>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Payment Instructions */}
+                <div className="mb-4 sm:mb-6">
+                  <p className="font-mono font-medium text-sm sm:text-lg text-black text-center leading-relaxed break-all">
+                    SEND EXACTLY {paymentData.virtualAccount.amount.toLocaleString()} TO
+                    <br />
+                    {paymentData.virtualAccount.accountNumber} ({paymentData.virtualAccount.bankName})
+                    {paymentData.virtualAccount.accountName && (
+                      <>
+                        <br />
+                        {paymentData.virtualAccount.accountName}
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                {/* Warning Note */}
+                <div className="mb-6 sm:mb-8">
+                  <p className="font-mono font-medium text-sm sm:text-lg text-black text-center">
+                    Note: sending higher or lower than the amount will lead to loss of asset
+                  </p>
+                </div>
+
+                {/* Submit Button */}
+                <button
+                  onClick={() => checkPaymentStatus(paymentData.orderId)}
+                  disabled={isCheckingPayment}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors min-h-[44px] w-full sm:w-auto mb-4 ${
+                    isCheckingPayment 
+                      ? 'bg-[#0897f7] cursor-wait' 
+                      : 'bg-[#0897f7] hover:bg-blue-600'
+                  }`}
+                  style={{
+                    fontFamily: 'Roboto Mono, monospace',
+                    minWidth: '140px',
+                    height: '50px',
+                    borderRadius: '10px'
+                  }}
+                >
+                  {isCheckingPayment ? (
+                    // Loading state with Figma-based spinner
+                    <LoadingSpinner size={30} className="text-white" />
+                  ) : (
+                    <span className="font-medium text-xs text-white text-center whitespace-pre-wrap leading-normal">
+                      CHECK PAYMENT
+                    </span>
+                  )}
+                </button>
+
+                {/* Manual Verification Button */}
+                <button
+                  onClick={() => verifyPaymentManually(paymentData.orderId)}
+                  disabled={paymentStatus === 'processing'}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 border-2 border-[#0897f7] rounded-lg transition-colors min-h-[44px] w-full sm:w-auto ${
+                    paymentStatus === 'processing' 
+                      ? 'text-gray-400 border-gray-300 cursor-wait' 
+                      : 'text-[#0897f7] hover:bg-[#0897f7] hover:text-white'
+                  }`}
+                  style={{
+                    fontFamily: 'Roboto Mono, monospace',
+                    minWidth: '140px'
+                  }}
+                >
+                  <span className="font-medium text-xs text-center">
+                    VERIFY PAYMENT
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {paymentStatus === 'completed' && (
+              <div className="bg-white border border-blue-500 rounded-[20px] p-6 text-center relative overflow-hidden">
+                {/* Transaction ID */}
+                <p className="font-medium text-black text-center mb-4" 
+                   style={{fontFamily: 'Roboto Mono, monospace', fontSize: '19.5px'}}>
+                  Txn id: {paymentData?.orderId || '30101'}
+                </p>
+                
+                {/* Green Checkmark Icon */}
+                <div className="w-[150px] h-[100px] mx-auto mb-6 bg-green-500 rounded-lg flex items-center justify-center">
+                  <Check className="w-16 h-16 text-white stroke-[4]" />
+                </div>
+                
+                {/* Payment Received Text */}
+                <p className="font-medium text-black text-center mb-4" 
+                   style={{fontFamily: 'Roboto Mono, monospace', fontSize: '19.5px'}}>
+                  PAYMENT RECEIVED! {paymentData?.virtualAccount.amount.toLocaleString() || '50,030'}
+                </p>
+                
+                {/* Deposit Message */}
+                <p className="text-black text-center" 
+                   style={{fontFamily: 'Roboto Mono, monospace', fontSize: '19.5px'}}>
+                  You will soon receive your deposit in{' '}
+                  <span className="text-blue-700 font-bold" style={{fontFamily: 'Gravitas One, serif'}}>
+                    {selectedService || 'Zora'}
+                  </span>
+                  {' '}app
+                </p>
+              </div>
+            )}
+
+            {paymentStatus === 'failed' && (
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <X className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-black mb-2">
+                  PAYMENT FAILED
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  There was an issue processing your payment. Please try again.
+                </p>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="w-full bg-red-600 text-white py-2 px-4 rounded text-sm font-medium hover:bg-red-700 transition-colors"
+                >
+                  TRY AGAIN
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
