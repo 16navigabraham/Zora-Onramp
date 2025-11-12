@@ -2,6 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { Zap, Check, X, AlertTriangle, Globe, Palette } from "lucide-react";
 
+// Backend URL from environment
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://zora-onramp-backend.onrender.com';
+
 // Loading Spinner Component based on Figma design
 const LoadingSpinner = ({ size = 39, className = "" }: { size?: number; className?: string }) => {
   const [currentVariant, setCurrentVariant] = useState(0);
@@ -93,7 +96,7 @@ export default function Home() {
   ]);
 
   // Core form data
-  const [recipientAddress, setRecipientAddress] = useState("0x1234567890123456789012345678901234567890");
+  const [recipientAddress, setRecipientAddress] = useState("0x");
   const [email, setEmail] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [username, setUsername] = useState("");
@@ -159,7 +162,7 @@ export default function Home() {
   const fetchContractHealth = async () => {
     try {
       setContractCheckLoading(true);
-      const res = await fetch('https://zora-onramp-backend.onrender.com/api/health');
+      const res = await fetch(`${BACKEND_URL}/api/health`);
       if (!res.ok) throw new Error(`Health request failed: ${res.status}`);
       const data = await res.json();
       // Attempt to read a rate from the health response if available
@@ -204,7 +207,7 @@ export default function Home() {
 
     setIsValidatingUsername(true);
     try {
-      const response = await fetch(`https://zora-onramp-backend.onrender.com/api/zora/validate/${encodeURIComponent(username)}`, {
+      const response = await fetch(`${BACKEND_URL}/api/zora/validate/${encodeURIComponent(username)}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -352,7 +355,7 @@ export default function Home() {
 
       console.log('Creating order with data:', orderData);
 
-      const response = await fetch('https://zora-onramp-backend.onrender.com/api/orders/create', {
+      const response = await fetch(`${BACKEND_URL}/api/orders/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -388,7 +391,7 @@ export default function Home() {
     try {
       setIsCheckingPayment(true);
       setPaymentStatus('processing');
-      const response = await fetch(`https://zora-onramp-backend.onrender.com/api/orders/${orderId}`, {
+      const response = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -426,7 +429,7 @@ export default function Home() {
   const verifyPaymentManually = async (orderId: string) => {
     try {
       setPaymentStatus('processing');
-      const response = await fetch(`https://zora-onramp-backend.onrender.com/api/orders/${orderId}/verify-payment`, {
+      const response = await fetch(`${BACKEND_URL}/api/orders/${orderId}/verify-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
