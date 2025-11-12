@@ -117,6 +117,13 @@ export default function Home() {
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
+
+  // Contract / admin wallet checks
+  const [contractBalanceUnits, setContractBalanceUnits] = useState<bigint | null>(null); // micro-USDC (6 decimals)
+  const [ngnToUsdRate, setNgnToUsdRate] = useState<number>(1650); // fallback rate; prefer backend-provided
+  const [contractCheckLoading, setContractCheckLoading] = useState(false);
+  const [isContractSufficient, setIsContractSufficient] = useState<boolean | null>(null);
 
   // Amount presets based on Figma design
   const amountPresets = [
@@ -125,6 +132,59 @@ export default function Home() {
   ];
 
   const [selectedPresetAmount, setSelectedPresetAmount] = useState<string>("");
+
+  // Helper: convert a decimal string (e.g. "6.375") to integer units with `decimals` precision
+  const decimalStringToUnits = (valueStr: string, decimals: number): bigint => {
+    if (!valueStr) return BigInt(0);
+    const parts = valueStr.split('.');
+    const intPart = parts[0] || '0';
+    const fracPart = (parts[1] || '').padEnd(decimals, '0').slice(0, decimals);
+    // concatenate and convert
+    const combined = intPart + fracPart;
+    // remove any non-digit characters just in case
+    const sanitized = combined.replace(/[^0-9]/g, '') || '0';
+    return BigInt(sanitized);
+  };
+
+  // Convert NGN amount (number or numeric string) into micro-USDC units (6 decimals) using the given rate
+  const requiredUsdcUnitsFromNgn = (ngnAmountRaw: string | number, rate: number) => {
+    const ngnAmount = typeof ngnAmountRaw === 'string' ? parseFloat(ngnAmountRaw || '0') : ngnAmountRaw;
+    if (!ngnAmount || !rate) return BigInt(0);
+    const usd = ngnAmount / rate; // decimal
+    const usdStr = usd.toFixed(6); // ensure 6 decimals
+    return decimalStringToUnits(usdStr, 6);
+  };
+
+  // Fetch contract health and parse contract.userBalance (expects a string like "6.375")
+  const fetchContractHealth = async () => {
+    try {
+      setContractCheckLoading(true);
+      const res = await fetch('https://zora-onramp-backend.onrender.com/api/health');
+      if (!res.ok) throw new Error(`Health request failed: ${res.status}`);
+      const data = await res.json();
+      // Attempt to read a rate from the health response if available
+      if (data?.ngnToUsdRate) {
+        const maybe = Number(data.ngnToUsdRate);
+        if (!Number.isNaN(maybe) && maybe > 0) setNgnToUsdRate(maybe);
+      } else if (data?.contract?.ngnToUsdRate) {
+        const maybe = Number(data.contract.ngnToUsdRate);
+        if (!Number.isNaN(maybe) && maybe > 0) setNgnToUsdRate(maybe);
+      }
+
+      const balanceStr = data?.contract?.userBalance;
+      if (balanceStr) {
+        const units = decimalStringToUnits(String(balanceStr), 6);
+        setContractBalanceUnits(units);
+      } else {
+        setContractBalanceUnits(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch contract health:', err);
+      setContractBalanceUnits(null);
+    } finally {
+      setContractCheckLoading(false);
+    }
+  };
 
   const handlePresetAmountSelect = (amount: string) => {
     setSelectedPresetAmount(amount);
@@ -245,9 +305,39 @@ export default function Home() {
     return hasValidInput && hasValidAmount && hasValidEmail && selectedService;
   };
 
+  // Re-check contract sufficiency whenever relevant values change
+  useEffect(() => {
+    // fetch health initially
+    fetchContractHealth();
+  }, []);
+
+  useEffect(() => {
+    // whenever contract balance or amount changes, evaluate sufficiency
+    const contractUnits = contractBalanceUnits;
+    if (contractUnits === null) {
+      // unknown state: don't block UI, but we could choose to block
+      setIsContractSufficient(null);
+      return;
+    }
+
+    const amountNgn = parseFloat(getCurrentAmount() || '0');
+    const requiredUnits = requiredUsdcUnitsFromNgn(amountNgn, ngnToUsdRate);
+    setIsContractSufficient(requiredUnits <= contractUnits);
+  }, [contractBalanceUnits, customAmount, selectedPresetAmount, ngnToUsdRate]);
+
   const handleCreateOrder = async () => {
     if (!isFormValid()) return;
-    
+    // Do a last-minute contract health check before attempting to create order
+    await fetchContractHealth();
+    if (isContractSufficient === false) {
+      // Show modal with a clear admin-wallet error message instead of alert
+      setPaymentErrorMessage('Insufficient funds in admin wallet — contact support');
+      setPaymentData(null);
+      setShowPaymentModal(true);
+      setPaymentStatus('failed');
+      return;
+    }
+
     setIsCreatingOrder(true);
     try {
       const orderData = {
@@ -831,13 +921,42 @@ export default function Home() {
 
                   {/* Proceed Button */}
                   <div className="pt-4 sm:pt-8">
+                    {/* Show contract insufficiency message when detected */}
+                    {isContractSufficient === false && (
+                      <div className="mb-3 text-center">
+                        <p className="text-sm text-red-600 font-medium">Insufficient funds in admin wallet — contact support</p>
+                      </div>
+                    )}
+
                     <button
                       onClick={handleCreateOrder}
-                      disabled={isCreatingOrder || !isFormValid()}
-                      className="w-full text-black underline font-medium text-sm hover:no-underline transition-all min-h-[44px] p-3"
+                      disabled={
+                        isCreatingOrder || !isFormValid() || isContractSufficient === false || contractCheckLoading
+                      }
+                      title={
+                        contractCheckLoading
+                          ? 'Checking admin wallet balance'
+                          : isContractSufficient === false
+                          ? 'Insufficient funds in admin wallet — contact support'
+                          : !isFormValid()
+                          ? 'Complete the form to proceed'
+                          : undefined
+                      }
+                      className={`w-full underline font-medium text-sm transition-all min-h-[44px] p-3 ${
+                        isCreatingOrder || isContractSufficient === false || contractCheckLoading ? 'text-gray-400 cursor-not-allowed' : 'text-black hover:no-underline'
+                      }`}
                       style={{fontFamily: 'Futura, sans-serif', textDecorationStyle: 'solid', textUnderlinePosition: 'from-font'}}
                     >
-                      {isCreatingOrder ? 'PROCESSING...' : 'PROCEED TO PAYMENT'}
+                      {contractCheckLoading ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <LoadingSpinner size={20} />
+                          <span>Checking wallet...</span>
+                        </div>
+                      ) : isCreatingOrder ? (
+                        'PROCESSING...'
+                      ) : (
+                        'PROCEED TO PAYMENT'
+                      )}
                     </button>
                   </div>
                 </div>
@@ -855,23 +974,23 @@ export default function Home() {
       </div>
 
       {/* Payment Modal */}
-      {showPaymentModal && paymentData && (
+      {showPaymentModal && (paymentData || paymentErrorMessage) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
           <div className="bg-white border border-black rounded-[26px] max-w-md w-full mx-3 sm:mx-0 relative max-h-[90vh] overflow-y-auto">
             {/* Close Button */}
             <button
-              onClick={() => setShowPaymentModal(false)}
+              onClick={() => { setShowPaymentModal(false); setPaymentErrorMessage(null); }}
               aria-label="Close payment modal"
               className="absolute top-3 sm:top-4 right-3 sm:right-4 text-black hover:text-gray-600 transition-colors z-10 min-h-[44px] min-w-[44px] flex items-center justify-center"
             >
               <X className="w-6 h-6" />
             </button>
 
-            {paymentStatus === 'pending' && (
+            {paymentStatus === 'pending' && paymentData && (
               <div className="p-4 sm:p-6 text-center">
                 {/* Transaction ID */}
                 <p className="font-mono font-medium text-base sm:text-lg text-black mb-4 sm:mb-6 break-all">
-                  Txn id: {paymentData.orderId}
+                  Txn id: {paymentData?.orderId}
                 </p>
 
                 {/* Warning Triangle Icon */}
@@ -890,10 +1009,10 @@ export default function Home() {
                 {/* Payment Instructions */}
                 <div className="mb-4 sm:mb-6">
                   <p className="font-mono font-medium text-sm sm:text-lg text-black text-center leading-relaxed break-all">
-                    SEND EXACTLY {paymentData.virtualAccount.amount.toLocaleString()} TO
+                    SEND EXACTLY {paymentData?.virtualAccount.amount.toLocaleString()} TO
                     <br />
-                    {paymentData.virtualAccount.accountNumber} ({paymentData.virtualAccount.bankName})
-                    {paymentData.virtualAccount.accountName && (
+                    {paymentData?.virtualAccount.accountNumber} ({paymentData?.virtualAccount.bankName})
+                    {paymentData?.virtualAccount.accountName && (
                       <>
                         <br />
                         {paymentData.virtualAccount.accountName}
@@ -911,7 +1030,7 @@ export default function Home() {
 
                 {/* Submit Button */}
                 <button
-                  onClick={() => checkPaymentStatus(paymentData.orderId)}
+                  onClick={() => paymentData && checkPaymentStatus(paymentData.orderId)}
                   disabled={isCheckingPayment}
                   className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors min-h-[44px] w-full sm:w-auto mb-4 ${
                     isCheckingPayment 
@@ -937,10 +1056,10 @@ export default function Home() {
 
                 {/* Manual Verification Button */}
                 <button
-                  onClick={() => verifyPaymentManually(paymentData.orderId)}
-                  disabled={paymentStatus === 'processing'}
+                  onClick={() => paymentData && verifyPaymentManually(paymentData.orderId)}
+                  disabled={isCheckingPayment}
                   className={`flex items-center justify-center gap-2 px-4 py-2 border-2 border-[#0897f7] rounded-lg transition-colors min-h-[44px] w-full sm:w-auto ${
-                    paymentStatus === 'processing' 
+                    isCheckingPayment 
                       ? 'text-gray-400 border-gray-300 cursor-wait' 
                       : 'text-[#0897f7] hover:bg-[#0897f7] hover:text-white'
                   }`}
@@ -996,13 +1115,13 @@ export default function Home() {
                   PAYMENT FAILED
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  There was an issue processing your payment. Please try again.
+                  {paymentErrorMessage || 'There was an issue processing your payment. Please try again.'}
                 </p>
                 <button
-                  onClick={() => setShowPaymentModal(false)}
+                  onClick={() => { setShowPaymentModal(false); setPaymentErrorMessage(null); }}
                   className="w-full bg-red-600 text-white py-2 px-4 rounded text-sm font-medium hover:bg-red-700 transition-colors"
                 >
-                  TRY AGAIN
+                  CLOSE
                 </button>
               </div>
             )}
