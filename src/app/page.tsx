@@ -888,13 +888,15 @@ export default function Home() {
                 {/* Payment Instructions */}
                 <div className="mb-4 sm:mb-6">
                   <p className="font-mono font-medium text-sm sm:text-lg text-black text-center leading-relaxed break-all">
-                    SEND EXACTLY {paymentData?.virtualAccount.amount.toLocaleString()} TO
+                    SEND EXACTLY ₦{paymentData?.virtualAccount.amount.toLocaleString()} TO
                     <br />
-                    {paymentData?.virtualAccount.accountNumber} ({paymentData?.virtualAccount.bankName})
+                    <span className="font-bold">{paymentData?.virtualAccount.accountNumber}</span>
+                    <br />
+                    <span className="text-sm">({paymentData?.virtualAccount.bankName})</span>
                     {paymentData?.virtualAccount.accountName && (
                       <>
                         <br />
-                        {paymentData.virtualAccount.accountName}
+                        <span className="text-sm">{paymentData.virtualAccount.accountName}</span>
                       </>
                     )}
                   </p>
