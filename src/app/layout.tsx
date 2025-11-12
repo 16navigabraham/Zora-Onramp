@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Zora Onramp - Naira to USDC",
   description: "Seamlessly convert Nigerian Naira to USDC for Zora ecosystem",
+  icons: {
+    icon: '/Form.png',
+  },
 };
 
 export default function RootLayout({
