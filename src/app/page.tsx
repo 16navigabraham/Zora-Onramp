@@ -1,9 +1,33 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Zap, Check, X, AlertTriangle, Globe, Palette } from "lucide-react";
+import { createPublicClient, http } from 'viem';
+import { base } from 'viem/chains';
 
 // Backend URL from environment
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://zora-onramp-backend.onrender.com';
+
+// Contract configuration
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org';
+const NGN_TO_USD_RATE = Number(process.env.NEXT_PUBLIC_NGN_TO_USD_RATE) || 1650;
+
+// Contract ABI - only the getBalance function
+const CONTRACT_ABI = [
+  {
+    name: 'getBalance',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ type: 'uint256' }],
+  },
+] as const;
+
+// Create public client for reading from blockchain
+const publicClient = createPublicClient({
+  chain: base,
+  transport: http(RPC_URL),
+});
 
 // Loading Spinner Component based on Figma design
 const LoadingSpinner = ({ size = 39, className = "" }: { size?: number; className?: string }) => {
@@ -124,7 +148,7 @@ export default function Home() {
 
   // Contract / admin wallet checks
   const [contractBalanceUnits, setContractBalanceUnits] = useState<bigint | null>(null); // micro-USDC (6 decimals)
-  const [ngnToUsdRate, setNgnToUsdRate] = useState<number>(1650); // fallback rate; prefer backend-provided
+  const [ngnToUsdRate] = useState<number>(NGN_TO_USD_RATE); // Exchange rate from environment
   const [contractCheckLoading, setContractCheckLoading] = useState(false);
   const [isContractSufficient, setIsContractSufficient] = useState<boolean | null>(null);
 
@@ -158,31 +182,26 @@ export default function Home() {
     return decimalStringToUnits(usdStr, 6);
   };
 
-  // Fetch contract health and parse contract.userBalance (expects a string like "6.375")
+  // Fetch contract balance directly from blockchain using viem
   const fetchContractHealth = async () => {
     try {
       setContractCheckLoading(true);
-      const res = await fetch(`${BACKEND_URL}/api/health`);
-      if (!res.ok) throw new Error(`Health request failed: ${res.status}`);
-      const data = await res.json();
-      // Attempt to read a rate from the health response if available
-      if (data?.ngnToUsdRate) {
-        const maybe = Number(data.ngnToUsdRate);
-        if (!Number.isNaN(maybe) && maybe > 0) setNgnToUsdRate(maybe);
-      } else if (data?.contract?.ngnToUsdRate) {
-        const maybe = Number(data.contract.ngnToUsdRate);
-        if (!Number.isNaN(maybe) && maybe > 0) setNgnToUsdRate(maybe);
+
+      // Read balance directly from contract
+      if (!CONTRACT_ADDRESS) {
+        throw new Error('Contract address not configured');
       }
 
-      const balanceStr = data?.contract?.userBalance;
-      if (balanceStr) {
-        const units = decimalStringToUnits(String(balanceStr), 6);
-        setContractBalanceUnits(units);
-      } else {
-        setContractBalanceUnits(null);
-      }
+      const balance = await publicClient.readContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'getBalance',
+      });
+
+      // balance is returned as bigint (in micro-USDC units with 6 decimals)
+      setContractBalanceUnits(balance);
     } catch (err) {
-      console.error('Failed to fetch contract health:', err);
+      console.error('Failed to fetch contract balance:', err);
       setContractBalanceUnits(null);
     } finally {
       setContractCheckLoading(false);
