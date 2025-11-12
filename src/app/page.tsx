@@ -362,9 +362,13 @@ export default function Home() {
 
     setIsCreatingOrder(true);
     try {
+      const baseAmount = parseFloat(getCurrentAmount() || "0");
+      const fee = 70; // Fee in NGN
+      const totalAmount = baseAmount + fee;
+
       const orderData = {
         serviceType: selectedService,
-        amountNGN: parseFloat(getCurrentAmount() || "0"),
+        amountNGN: totalAmount,
         email: email,
         ...(selectedService === "zora" 
           ? { username: username }
