@@ -410,10 +410,8 @@ export default function Home() {
     }
   };
 
-  const checkPaymentStatus = async (orderId: string) => {
+  const pollOrderStatus = async (orderId: string) => {
     try {
-      setIsCheckingPayment(true);
-      setPaymentStatus('processing');
       const response = await fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
         method: 'GET',
         headers: {
@@ -429,57 +427,26 @@ export default function Home() {
       console.log('Payment status response:', data);
       
       if (data.success && data.order) {
-        const orderStatus = data.order.status;
+        const orderStatus = data.order.status.toUpperCase();
         
-        if (orderStatus === 'completed' || orderStatus === 'confirmed') {
+        if (orderStatus === 'COMPLETED' || orderStatus === 'CONFIRMED') {
           setPaymentStatus('completed');
-        } else if (orderStatus === 'failed' || orderStatus === 'expired') {
+          return 'completed';
+        } else if (orderStatus === 'FAILED' || orderStatus === 'EXPIRED') {
           setPaymentStatus('failed');
-        } else if (orderStatus === 'pending') {
+          return 'failed';
+        } else if (orderStatus === 'PENDING') {
           setPaymentStatus('pending');
+          return 'pending';
         } else {
           setPaymentStatus('processing');
+          return 'processing';
         }
       }
+      return 'pending';
     } catch (error) {
       console.error('Error checking payment status:', error);
-      setPaymentStatus('failed');
-    } finally {
-      setIsCheckingPayment(false);
-    }
-  };
-
-  const verifyPaymentManually = async (orderId: string) => {
-    try {
-      setPaymentStatus('processing');
-      const response = await fetch(`${BACKEND_URL}/api/orders/${orderId}/verify-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Payment verification failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Manual verification response:', data);
-      
-      if (data.success && data.order) {
-        const orderStatus = data.order.status;
-        
-        if (orderStatus === 'completed' || orderStatus === 'confirmed') {
-          setPaymentStatus('completed');
-        } else if (orderStatus === 'failed' || orderStatus === 'expired') {
-          setPaymentStatus('failed');
-        } else {
-          setPaymentStatus('processing');
-        }
-      }
-    } catch (error) {
-      console.error('Error with manual verification:', error);
-      setPaymentStatus('failed');
+      return 'error';
     }
   };
 
@@ -490,6 +457,25 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, [showPaymentModal, paymentStatus, timeLeft]);
+
+  // Auto-polling effect for payment status
+  useEffect(() => {
+    if (!showPaymentModal || !paymentData?.orderId || paymentStatus === 'completed' || paymentStatus === 'failed') {
+      return;
+    }
+
+    // Poll every 5 seconds while payment is pending or processing
+    const pollInterval = setInterval(async () => {
+      const status = await pollOrderStatus(paymentData.orderId);
+      
+      // Stop polling if payment completed or failed
+      if (status === 'completed' || status === 'failed') {
+        clearInterval(pollInterval);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [showPaymentModal, paymentData?.orderId, paymentStatus]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -903,56 +889,50 @@ export default function Home() {
                 </div>
 
                 {/* Warning Note */}
-                <div className="mb-6 sm:mb-8">
+                <div className="mb-4 sm:mb-6">
                   <p className="font-mono font-medium text-sm sm:text-lg text-black text-center">
                     Note: sending higher or lower than the amount will lead to loss of asset
                   </p>
                 </div>
 
-                {/* Submit Button */}
-                <button
-                  onClick={() => paymentData && checkPaymentStatus(paymentData.orderId)}
-                  disabled={isCheckingPayment}
-                  className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors min-h-[44px] w-full sm:w-auto mb-4 ${
-                    isCheckingPayment 
-                      ? 'bg-[#0897f7] cursor-wait' 
-                      : 'bg-[#0897f7] hover:bg-blue-600'
-                  }`}
-                  style={{
-                    fontFamily: 'Roboto Mono, monospace',
-                    minWidth: '140px',
-                    height: '50px',
-                    borderRadius: '10px'
-                  }}
-                >
-                  {isCheckingPayment ? (
-                    // Loading state with Figma-based spinner
-                    <LoadingSpinner size={30} className="text-white" />
-                  ) : (
-                    <span className="font-medium text-xs text-white text-center whitespace-pre-wrap leading-normal">
-                      CHECK PAYMENT
-                    </span>
-                  )}
-                </button>
+                {/* Timer Display */}
+                <div className="mb-6 sm:mb-8">
+                  <p className="font-mono font-medium text-base sm:text-xl text-red-600 text-center">
+                    Time remaining: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                  </p>
+                  <p className="font-mono text-xs sm:text-sm text-gray-600 text-center mt-2">
+                    Payment must be completed within 15 minutes
+                  </p>
+                </div>
 
-                {/* Manual Verification Button */}
-                <button
-                  onClick={() => paymentData && verifyPaymentManually(paymentData.orderId)}
-                  disabled={isCheckingPayment}
-                  className={`flex items-center justify-center gap-2 px-4 py-2 border-2 border-[#0897f7] rounded-lg transition-colors min-h-[44px] w-full sm:w-auto ${
-                    isCheckingPayment 
-                      ? 'text-gray-400 border-gray-300 cursor-wait' 
-                      : 'text-[#0897f7] hover:bg-[#0897f7] hover:text-white'
-                  }`}
-                  style={{
-                    fontFamily: 'Roboto Mono, monospace',
-                    minWidth: '140px'
-                  }}
-                >
-                  <span className="font-medium text-xs text-center">
-                    VERIFY PAYMENT
+                {/* Auto-checking Status Indicator */}
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <LoadingSpinner size={20} className="text-blue-600" />
+                  <span className="font-mono text-sm text-gray-600">
+                    Automatically checking for payment...
                   </span>
-                </button>
+                </div>
+              </div>
+            )}
+
+            {paymentStatus === 'processing' && (
+              <div className="p-6 text-center">
+                {/* Transaction ID */}
+                <p className="font-mono font-medium text-base sm:text-lg text-black mb-4 sm:mb-6 break-all">
+                  Txn id: {paymentData?.orderId}
+                </p>
+
+                {/* Processing Animation */}
+                <div className="flex justify-center mb-6">
+                  <LoadingSpinner size={60} className="text-blue-600" />
+                </div>
+
+                <h3 className="text-lg font-bold text-black mb-2">
+                  PROCESSING PAYMENT
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Your payment is being verified. Please wait...
+                </p>
               </div>
             )}
 
