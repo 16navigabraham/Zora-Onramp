@@ -749,13 +749,23 @@ export default function Home() {
                     </span>
                   </div>
 
-                  {/* Amount */}
+                  {/* Amount NGN */}
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
                     <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      Amount(ngn)
+                      Amount (NGN)
                     </span>
                     <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
                       {parseInt(getCurrentAmount()).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {/* Amount USDC */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Amount (USDC)
+                    </span>
+                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {(parseInt(getCurrentAmount()) / ngnToUsdRate).toFixed(2)}
                     </span>
                   </div>
 
@@ -958,7 +968,11 @@ export default function Home() {
                 {/* Deposit Message */}
                 <p className="text-black text-center" 
                    style={{fontFamily: 'Roboto Mono, monospace', fontSize: '19.5px'}}>
-                  You will soon receive your deposit in{' '}
+                  You will soon receive{' '}
+                  <span className="font-bold">
+                    {paymentData?.usdcAmount || ((paymentData?.virtualAccount.amount || 0) / ngnToUsdRate).toFixed(2)} USDC
+                  </span>
+                  {' '}deposit in{' '}
                   <span className="text-blue-700 font-bold" style={{fontFamily: 'Gravitas One, serif'}}>
                     {selectedService || 'Zora'}
                   </span>
