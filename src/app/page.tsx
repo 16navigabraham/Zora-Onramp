@@ -970,7 +970,7 @@ export default function Home() {
                    style={{fontFamily: 'Roboto Mono, monospace', fontSize: '19.5px'}}>
                   You will soon receive{' '}
                   <span className="font-bold">
-                    {paymentData?.usdcAmount || ((paymentData?.virtualAccount.amount || 0) / ngnToUsdRate).toFixed(2)} USDC
+                    {paymentData?.usdcAmount || ((parseInt(getCurrentAmount()) || 0) / ngnToUsdRate).toFixed(2)} USDC
                   </span>
                   {' '}deposit in{' '}
                   <span className="text-blue-700 font-bold" style={{fontFamily: 'Gravitas One, serif'}}>
