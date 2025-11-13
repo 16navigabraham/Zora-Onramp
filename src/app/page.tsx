@@ -786,7 +786,7 @@ export default function Home() {
                     {/* Show contract insufficiency message when detected */}
                     {isContractSufficient === false && (
                       <div className="mb-3 text-center">
-                        <p className="text-sm text-red-600 font-medium">Insufficient funds in admin wallet — contact support</p>
+                        <p className="text-sm text-red-600 font-medium">UNABLE TO CREATE ORDER — contact support</p>
                       </div>
                     )}
 
@@ -799,7 +799,7 @@ export default function Home() {
                         contractCheckLoading
                           ? 'Checking admin wallet balance'
                           : isContractSufficient === false
-                          ? 'Insufficient funds in admin wallet — contact support'
+                          ? 'Unable to create order — contact support'
                           : !isFormValid()
                           ? 'Complete the form to proceed'
                           : undefined
