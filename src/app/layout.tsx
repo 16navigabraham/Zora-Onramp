@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zora Onramp - Naira to USDC",
-  description: "Seamlessly convert Nigerian Naira to USDC for Zora ecosystem",
+  title: "Asap- Naira to USDC",
+  description: "Instant USDC top-up from your bank to wallet",
   icons: {
     icon: '/Form.png',
   },
