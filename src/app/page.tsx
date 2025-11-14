@@ -33,14 +33,6 @@ interface FarcasterUser {
   verifications?: string[];
 }
 
-interface FrameContext {
-  user?: FarcasterUser;
-  client?: {
-    clientFid?: number;
-    added?: boolean;
-  };
-}
-
 // Backend URL from environment
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://zora-onramp-backend.onrender.com';
 
@@ -119,11 +111,6 @@ interface Service {
   selected: boolean;
 }
 
-interface Transaction {
-  id: string;
-  amount: string;
-}
-
 interface VirtualAccount {
   accountNumber: string;
   bankName: string;
@@ -141,12 +128,6 @@ interface PaymentData {
 }
 
 export default function Home() {
-  const [services] = useState<Service[]>([
-    { id: "zora", name: "Zora", selected: false },
-    { id: "base", name: "Base app", selected: false },
-    { id: "wallet", name: "Wallet", selected: false },
-  ]);
-
   // Core form data
   const [email, setEmail] = useState("");
   const [selectedService, setSelectedService] = useState("");
@@ -383,6 +364,7 @@ export default function Home() {
             // Access wallet address from context user
             if (context?.user) {
               // Try to get verified addresses - SDK may expose this differently
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const userAny = context.user as any;
               if (userAny.verifiedAddresses?.ethAddresses?.[0]) {
                 walletAddr = userAny.verifiedAddresses.ethAddresses[0];
