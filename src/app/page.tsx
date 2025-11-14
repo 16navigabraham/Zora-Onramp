@@ -4,6 +4,30 @@ import { Zap, Check, X, AlertTriangle, Globe, Palette } from "lucide-react";
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 
+// Farcaster Frame SDK types
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
+interface FarcasterUser {
+  fid: number;
+  username: string;
+  displayName: string;
+  pfpUrl: string;
+  custody?: string;
+  verifications?: string[];
+}
+
+interface FrameContext {
+  user?: FarcasterUser;
+  client?: {
+    clientFid?: number;
+    added?: boolean;
+  };
+}
+
 // Backend URL from environment
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://zora-onramp-backend.onrender.com';
 
@@ -152,6 +176,11 @@ export default function Home() {
   const [contractCheckLoading, setContractCheckLoading] = useState(false);
   const [isContractSufficient, setIsContractSufficient] = useState<boolean | null>(null);
 
+  // Mini-app context detection
+  const [isMiniApp, setIsMiniApp] = useState(false);
+  const [detectedWalletAddress, setDetectedWalletAddress] = useState<string>("");
+  const [frameContext, setFrameContext] = useState<FrameContext | null>(null);
+
   // Amount presets based on Figma design
   const amountPresets = [
     "200", "400", "500",
@@ -278,7 +307,14 @@ export default function Home() {
   const handleServiceSelect = (serviceId: string) => {
     setSelectedService(serviceId);
     setUsername("");
-    setWalletAddress("");
+    
+    // Auto-fill wallet address for Base app/Wallet in mini-app context
+    if (isMiniApp && (serviceId === 'baseapp' || serviceId === 'wallet') && detectedWalletAddress) {
+      setWalletAddress(detectedWalletAddress);
+    } else {
+      setWalletAddress("");
+    }
+    
     setIsUsernameValid(null);
     setZoraAddress("");
   };
@@ -326,6 +362,72 @@ export default function Home() {
     const hasValidEmail = email && email.includes("@");
     return hasValidInput && hasValidAmount && hasValidEmail && selectedService;
   };
+
+  // Detect mini-app context on mount
+  useEffect(() => {
+    const detectMiniAppContext = async () => {
+      // Check if running in Farcaster Frame context
+      const isFarcasterFrame = window.self !== window.top || 
+        document.referrer.includes('warpcast') || 
+        document.referrer.includes('farcaster');
+      
+      // Check for Base app context
+      const isBaseApp = document.referrer.includes('base.org') || 
+        window.location.search.includes('base-app');
+
+      const isInMiniApp = isFarcasterFrame || isBaseApp;
+      setIsMiniApp(isInMiniApp);
+
+      if (isInMiniApp) {
+        // Try to get wallet address from various sources
+        let walletAddr = "";
+
+        // 1. Check for Farcaster Frame SDK context
+        try {
+          // @ts-ignore - Farcaster Frame SDK
+          if (window.fc?.getUserData) {
+            // @ts-ignore
+            const userData = await window.fc.getUserData();
+            if (userData?.verifications?.[0]) {
+              walletAddr = userData.verifications[0];
+            }
+          }
+        } catch (e) {
+          console.log('Farcaster SDK not available');
+        }
+
+        // 2. Check for ethereum provider (Coinbase Wallet, MetaMask in Base app)
+        if (!walletAddr && window.ethereum) {
+          try {
+            const accounts = await window.ethereum.request({ 
+              method: 'eth_accounts' 
+            });
+            if (accounts && accounts.length > 0) {
+              walletAddr = accounts[0];
+            }
+          } catch (e) {
+            console.log('Ethereum provider not available');
+          }
+        }
+
+        // 3. Check URL parameters for wallet address
+        if (!walletAddr) {
+          const urlParams = new URLSearchParams(window.location.search);
+          const walletParam = urlParams.get('wallet') || urlParams.get('address');
+          if (walletParam && walletParam.startsWith('0x')) {
+            walletAddr = walletParam;
+          }
+        }
+
+        if (walletAddr) {
+          setDetectedWalletAddress(walletAddr);
+          setWalletAddress(walletAddr);
+        }
+      }
+    };
+
+    detectMiniAppContext();
+  }, []);
 
   // Re-check contract sufficiency whenever relevant values change
   useEffect(() => {
@@ -604,7 +706,12 @@ export default function Home() {
                       onChange={handleInputChange}
                       placeholder={getInputPlaceholder()}
                       aria-label={getInputLabel()}
-                      className="w-full p-3 border-2 border-black rounded bg-white text-black text-sm sm:text-base"
+                      readOnly={isMiniApp && (selectedService === 'baseapp' || selectedService === 'wallet') && !!detectedWalletAddress}
+                      className={`w-full p-3 border-2 border-black rounded text-black text-sm sm:text-base ${
+                        isMiniApp && (selectedService === 'baseapp' || selectedService === 'wallet') && detectedWalletAddress 
+                          ? 'bg-gray-100 cursor-not-allowed' 
+                          : 'bg-white'
+                      }`}
                       style={{
                         boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.25)',
                         fontFamily: 'Roboto Mono, monospace',
@@ -623,6 +730,11 @@ export default function Home() {
                         ) : (
                           <X className="w-5 h-5 text-red-500" />
                         )}
+                      </div>
+                    )}
+                    {isMiniApp && (selectedService === 'baseapp' || selectedService === 'wallet') && detectedWalletAddress && (
+                      <div className="absolute right-3 top-3">
+                        <Check className="w-5 h-5 text-green-500" />
                       </div>
                     )}
                   </div>
