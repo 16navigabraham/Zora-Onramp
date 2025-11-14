@@ -1,24 +1,24 @@
-{
-  "accountAssociation": {
-    "header": "{{NEXT_PUBLIC_FARCASTER_ACCOUNT_HEADER}}",
-    "payload": "{{NEXT_PUBLIC_FARCASTER_ACCOUNT_PAYLOAD}}",
-    "signature": "{{NEXT_PUBLIC_FARCASTER_ACCOUNT_SIGNATURE}}"
-  },
-  "frame": {
-    "version": "1",
-    "name": "ASAP - Zora Onramp",
-    "iconUrl": "https://zora-onramp.vercel.app/icon.png",
-    "splashImageUrl": "https://zora-onramp.vercel.app/splash.png",
-    "splashBackgroundColor": "#3B82F6",
-    "homeUrl": "https://zora-onramp.vercel.app",
-    "webhookUrl": "https://zora-onramp-backend.onrender.com/api/farcaster/webhook"
-  },
-  "miniApp": {
-    "name": "ASAP - Zora Onramp",
-    "description": "Fast and easy onramp to USDC on Base for Zora, Base app, and Wallet users",
-    "icon": "https://zora-onramp.vercel.app/icon.png",
-    "splashImage": "https://zora-onramp.vercel.app/splash.png",
-    "url": "https://zora-onramp.vercel.app",
-    "version": "1.0.0"
-  }
-}
+// {
+//   "accountAssociation": {
+//     "header": "{{NEXT_PUBLIC_FARCASTER_ACCOUNT_HEADER}}",
+//     "payload": "{{NEXT_PUBLIC_FARCASTER_ACCOUNT_PAYLOAD}}",
+//     "signature": "{{NEXT_PUBLIC_FARCASTER_ACCOUNT_SIGNATURE}}"
+//   },
+//   "frame": {
+//     "version": "next",
+//     "name": "ASAP - Zora Onramp",
+//     "iconUrl": "https://zora-onramp.vercel.app/icon.png",
+//     "splashImageUrl": "https://zora-onramp.vercel.app/splash.png",
+//     "splashBackgroundColor": "#3B82F6",
+//     "homeUrl": "https://zora-onramp.vercel.app",
+//     "webhookUrl": "https://zora-onramp-backend.onrender.com/api/farcaster/webhook"
+//   },
+//   "miniApp": {
+//     "name": "ASAP - Zora Onramp",
+//     "description": "Fast and easy onramp to USDC on Base for Zora, Base app, and Wallet users",
+//     "icon": "https://zora-onramp.vercel.app/icon.png",
+//     "splashImage": "https://zora-onramp.vercel.app/splash.png",
+//     "url": "https://zora-onramp.vercel.app",
+//     "version": "1.0.0"
+//   }
+// }
