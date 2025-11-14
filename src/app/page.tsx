@@ -1,13 +1,23 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Zap, Check, X, AlertTriangle, Globe, Palette } from "lucide-react";
+import { Zap, Check, X, AlertTriangle } from "lucide-react";
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 
 // Farcaster Frame SDK types
 declare global {
   interface Window {
-    ethereum?: any;
+    ethereum?: {
+      request: (args: { method: string }) => Promise<string[]>;
+    };
+    fc?: {
+      getUserData: () => Promise<{
+        verifications?: string[];
+      }>;
+      actions?: {
+        ready: () => void;
+      };
+    };
   }
 }
 
@@ -128,23 +138,13 @@ interface PaymentData {
 }
 
 export default function Home() {
-  const [services, setServices] = useState<Service[]>([
+  const [services] = useState<Service[]>([
     { id: "zora", name: "Zora", selected: false },
     { id: "base", name: "Base app", selected: false },
     { id: "wallet", name: "Wallet", selected: false },
   ]);
 
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    { id: "1", amount: "200" },
-    { id: "2", amount: "400" },
-    { id: "3", amount: "500" },
-    { id: "4", amount: "800" },
-    { id: "5", amount: "1000" },
-    { id: "6", amount: "1600" },
-  ]);
-
   // Core form data
-  const [recipientAddress, setRecipientAddress] = useState("0x");
   const [email, setEmail] = useState("");
   const [selectedService, setSelectedService] = useState("");
   const [username, setUsername] = useState("");
@@ -155,18 +155,13 @@ export default function Home() {
   // Validation states
   const [isValidatingUsername, setIsValidatingUsername] = useState(false);
   const [isUsernameValid, setIsUsernameValid] = useState<boolean | null>(null);
-  const [zoraAddress, setZoraAddress] = useState<string>("");
   const [validationTimeout, setValidationTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  // UI state
-  const [showASAPInterface, setShowASAPInterface] = useState(false);
 
   // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentData, setPaymentData] = useState<PaymentData | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('pending');
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
-  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes
   const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
 
@@ -179,7 +174,6 @@ export default function Home() {
   // Mini-app context detection
   const [isMiniApp, setIsMiniApp] = useState(false);
   const [detectedWalletAddress, setDetectedWalletAddress] = useState<string>("");
-  const [frameContext, setFrameContext] = useState<FrameContext | null>(null);
 
   // Amount presets based on Figma design
   const amountPresets = [
@@ -249,7 +243,6 @@ export default function Home() {
   const validateZoraUsername = async (username: string) => {
     if (!username) {
       setIsUsernameValid(null);
-      setZoraAddress("");
       return;
     }
 
@@ -265,7 +258,6 @@ export default function Home() {
       if (!response.ok) {
         console.error('Username validation failed:', response.status);
         setIsUsernameValid(false);
-        setZoraAddress("");
         return;
       }
       
@@ -273,15 +265,9 @@ export default function Home() {
       console.log('Validation response:', data);
       
       setIsUsernameValid(data.isValid);
-      if (data.isValid && data.address) {
-        setZoraAddress(data.address);
-      } else {
-        setZoraAddress("");
-      }
     } catch (error) {
       console.error('Error validating username:', error);
       setIsUsernameValid(false);
-      setZoraAddress("");
     } finally {
       setIsValidatingUsername(false);
     }
@@ -316,7 +302,6 @@ export default function Home() {
     }
     
     setIsUsernameValid(null);
-    setZoraAddress("");
   };
 
   const getInputLabel = () => {
@@ -384,15 +369,13 @@ export default function Home() {
 
         // 1. Check for Farcaster Frame SDK context
         try {
-          // @ts-ignore - Farcaster Frame SDK
           if (window.fc?.getUserData) {
-            // @ts-ignore
             const userData = await window.fc.getUserData();
             if (userData?.verifications?.[0]) {
               walletAddr = userData.verifications[0];
             }
           }
-        } catch (e) {
+        } catch {
           console.log('Farcaster SDK not available');
         }
 
@@ -405,7 +388,7 @@ export default function Home() {
             if (accounts && accounts.length > 0) {
               walletAddr = accounts[0];
             }
-          } catch (e) {
+          } catch {
             console.log('Ethereum provider not available');
           }
         }
@@ -429,6 +412,13 @@ export default function Home() {
     detectMiniAppContext();
   }, []);
 
+  // Call Farcaster SDK ready() when app is loaded
+  useEffect(() => {
+    if (window.fc?.actions?.ready) {
+      window.fc.actions.ready();
+    }
+  }, []);
+
   // Re-check contract sufficiency whenever relevant values change
   useEffect(() => {
     // fetch health initially
@@ -447,6 +437,7 @@ export default function Home() {
     const amountNgn = parseFloat(getCurrentAmount() || '0');
     const requiredUnits = requiredUsdcUnitsFromNgn(amountNgn, ngnToUsdRate);
     setIsContractSufficient(requiredUnits <= contractUnits);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractBalanceUnits, customAmount, selectedPresetAmount, ngnToUsdRate]);
 
   const handleCreateOrder = async () => {
@@ -588,10 +579,6 @@ export default function Home() {
     };
   }, [validationTimeout]);
 
-  const filteredServices = services.filter((service) =>
-    service.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600 relative overflow-hidden">
       {/* Background Decorative Circles - Responsive */}
@@ -651,7 +638,7 @@ export default function Home() {
               
               {/* Services List */}
               <div className="divide-y-2 divide-gray-300">
-                {['Zora', 'Base app', 'Wallet'].map((serviceName, index) => (
+                {['Zora', 'Base app', 'Wallet'].map((serviceName) => (
                   <div key={serviceName} className="grid grid-cols-2 min-h-[60px] sm:min-h-[80px] lg:min-h-[100px] border-b-2 border-gray-300 last:border-b-0">
                     <div className="flex items-center justify-center border-r-2 border-gray-300 p-2">
                       <button

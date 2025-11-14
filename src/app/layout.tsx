@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   description: "Fast and easy onramp to USDC on Base for Zora, Base app, and Wallet users",
   icons: {
     icon: '/Form.png',
+    apple: '/icon.png',
   },
   openGraph: {
     title: "ASAP - Zora Onramp",
@@ -46,6 +47,7 @@ export default function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <link rel="manifest" href="/api/farcaster-manifest" />
+        <link rel="apple-touch-icon" href="/icon.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
