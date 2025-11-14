@@ -1,7 +1,7 @@
 {
   "name": "zora-onramp-frontend",
   "version": "0.1.0",
-  "description": "Frontend for Zora Onramp - Convert Naira to USDC/ETH",
+  "description": "Frontend for Zora Onramp - Convert Naira to USDC",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack --port 3002",
