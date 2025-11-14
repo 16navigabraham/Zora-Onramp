@@ -14,7 +14,9 @@ declare global {
       getUserData: () => Promise<{
         verifications?: string[];
       }>;
-      actions?: {
+    };
+    sdk?: {
+      actions: {
         ready: () => void;
       };
     };
@@ -414,8 +416,20 @@ export default function Home() {
 
   // Call Farcaster SDK ready() when app is loaded
   useEffect(() => {
-    if (window.fc?.actions?.ready) {
-      window.fc.actions.ready();
+    const callReady = () => {
+      if (window.sdk?.actions?.ready) {
+        window.sdk.actions.ready();
+        console.log('Farcaster SDK ready() called');
+      }
+    };
+
+    // If SDK is already loaded, call ready immediately
+    if (window.sdk) {
+      callReady();
+    } else {
+      // Otherwise wait for SDK to load
+      window.addEventListener('load', callReady);
+      return () => window.removeEventListener('load', callReady);
     }
   }, []);
 
