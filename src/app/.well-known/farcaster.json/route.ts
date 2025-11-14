@@ -9,7 +9,7 @@ export async function GET() {
     },
     frame: {
       version: "next",
-      name: "ASAP - Zora Onramp",
+      name: "ASAP",
       iconUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://useasap.xyz'}/icon.png`,
       splashImageUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'https://useasap.xyz'}/splash.png`,
       splashBackgroundColor: "#3B82F6",
@@ -19,7 +19,7 @@ export async function GET() {
         : "https://zora-onramp-backend.onrender.com/api/farcaster/webhook",
     },
     miniApp: {
-      name: "ASAP - Zora Onramp",
+      name: "ASAP",
       description: "Fast and easy onramp to USDC on Base for Zora, Base app, and Wallet users",
       url: process.env.NEXT_PUBLIC_APP_URL || "https://useasap.xyz",
     }

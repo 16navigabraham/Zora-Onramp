@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Zap, Check, X, AlertTriangle } from "lucide-react";
+import { Zap, Check, X, AlertTriangle, Copy } from "lucide-react";
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 import { sdk } from '@farcaster/miniapp-sdk';
@@ -177,6 +177,7 @@ export default function Home() {
   // Mini-app context detection
   const [isMiniApp, setIsMiniApp] = useState(false);
   const [detectedWalletAddress, setDetectedWalletAddress] = useState<string>("");
+  const [copiedAccountNumber, setCopiedAccountNumber] = useState(false);
 
   // Amount presets based on Figma design
   const amountPresets = [
@@ -307,6 +308,16 @@ export default function Home() {
     setIsUsernameValid(null);
   };
 
+  const copyAccountNumber = async (accountNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(accountNumber);
+      setCopiedAccountNumber(true);
+      setTimeout(() => setCopiedAccountNumber(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
+  };
+
   const getInputLabel = () => {
     switch (selectedService) {
       case "zora": return "Zora Username";
@@ -351,64 +362,73 @@ export default function Home() {
     return hasValidInput && hasValidAmount && hasValidEmail && selectedService;
   };
 
-  // Detect mini-app context on mount
+  // Detect mini-app context and get wallet on mount
   useEffect(() => {
     const detectMiniAppContext = async () => {
-      // Check if running in Farcaster Frame context
-      const isFarcasterFrame = window.self !== window.top || 
-        document.referrer.includes('warpcast') || 
-        document.referrer.includes('farcaster');
-      
-      // Check for Base app context
-      const isBaseApp = document.referrer.includes('base.org') || 
-        window.location.search.includes('base-app');
+      try {
+        // Use Farcaster SDK to check if running in mini-app
+        const isInMiniApp = await sdk.isInMiniApp();
+        setIsMiniApp(isInMiniApp);
+        console.log('Is Mini App:', isInMiniApp);
 
-      const isInMiniApp = isFarcasterFrame || isBaseApp;
-      setIsMiniApp(isInMiniApp);
+        if (isInMiniApp) {
+          // Try to get wallet address from Farcaster SDK
+          let walletAddr = "";
 
-      if (isInMiniApp) {
-        // Try to get wallet address from various sources
-        let walletAddr = "";
-
-        // 1. Check for Farcaster Frame SDK context
-        try {
-          if (window.fc?.getUserData) {
-            const userData = await window.fc.getUserData();
-            if (userData?.verifications?.[0]) {
-              walletAddr = userData.verifications[0];
-            }
-          }
-        } catch {
-          console.log('Farcaster SDK not available');
-        }
-
-        // 2. Check for ethereum provider (Coinbase Wallet, MetaMask in Base app)
-        if (!walletAddr && window.ethereum) {
           try {
-            const accounts = await window.ethereum.request({ 
-              method: 'eth_accounts' 
-            });
-            if (accounts && accounts.length > 0) {
-              walletAddr = accounts[0];
+            // Get user context from Farcaster SDK
+            const context = await sdk.context;
+            console.log('Farcaster context:', context);
+            
+            // Access wallet address from context user
+            if (context?.user) {
+              // Try to get verified addresses - SDK may expose this differently
+              const userAny = context.user as any;
+              if (userAny.verifiedAddresses?.ethAddresses?.[0]) {
+                walletAddr = userAny.verifiedAddresses.ethAddresses[0];
+                console.log('Wallet from Farcaster verified addresses:', walletAddr);
+              } else if (userAny.custody) {
+                walletAddr = userAny.custody;
+                console.log('Wallet from Farcaster custody:', walletAddr);
+              }
             }
-          } catch {
-            console.log('Ethereum provider not available');
+          } catch (error) {
+            console.log('Error getting Farcaster context:', error);
+          }
+
+          // Fallback: Check for ethereum provider (Coinbase Wallet, MetaMask in Base app)
+          if (!walletAddr && window.ethereum) {
+            try {
+              const accounts = await window.ethereum.request({ 
+                method: 'eth_accounts' 
+              });
+              if (accounts && accounts.length > 0) {
+                walletAddr = accounts[0];
+                console.log('Wallet from ethereum provider:', walletAddr);
+              }
+            } catch (error) {
+              console.log('Ethereum provider not available:', error);
+            }
+          }
+
+          // Fallback: Check URL parameters for wallet address
+          if (!walletAddr) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const walletParam = urlParams.get('wallet') || urlParams.get('address');
+            if (walletParam && walletParam.startsWith('0x')) {
+              walletAddr = walletParam;
+              console.log('Wallet from URL params:', walletAddr);
+            }
+          }
+
+          if (walletAddr) {
+            setDetectedWalletAddress(walletAddr);
+            setWalletAddress(walletAddr);
           }
         }
-
-        // 3. Check URL parameters for wallet address
-        if (!walletAddr) {
-          const urlParams = new URLSearchParams(window.location.search);
-          const walletParam = urlParams.get('wallet') || urlParams.get('address');
-          if (walletParam && walletParam.startsWith('0x')) {
-            walletAddr = walletParam;
-          }
-        }
-
-        if (walletAddr) {
-          setDetectedWalletAddress(walletAddr);
-          setWalletAddress(walletAddr);
-        }
+      } catch (error) {
+        console.log('Error detecting mini-app context:', error);
+        setIsMiniApp(false);
       }
     };
 
@@ -992,18 +1012,37 @@ export default function Home() {
 
                 {/* Payment Instructions */}
                 <div className="mb-4 sm:mb-6">
-                  <p className="font-mono font-medium text-sm sm:text-lg text-black text-center leading-relaxed break-all">
+                  <p className="font-medium text-sm sm:text-lg text-black text-center leading-relaxed" style={{fontFamily: 'Roboto Mono, monospace'}}>
                     SEND EXACTLY ₦{paymentData?.virtualAccount.amount.toLocaleString()} TO
-                    <br />
-                    <span className="font-bold">{paymentData?.virtualAccount.accountNumber}</span>
-                    <br />
-                    <span className="text-sm">({paymentData?.virtualAccount.bankName})</span>
-                    {paymentData?.virtualAccount.accountName && (
-                      <>
-                        <br />
-                        <span className="text-sm">{paymentData.virtualAccount.accountName}</span>
-                      </>
-                    )}
+                  </p>
+                  
+                  {/* Account Number with Copy Button */}
+                  <div className="flex items-center justify-center gap-2 mt-3 mb-2">
+                    <span className="font-bold text-lg sm:text-xl" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {paymentData?.virtualAccount.accountNumber}
+                    </span>
+                    <button
+                      onClick={() => copyAccountNumber(paymentData?.virtualAccount.accountNumber || '')}
+                      className="p-2 hover:bg-gray-100 rounded transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      aria-label="Copy account number"
+                      title="Copy account number"
+                    >
+                      {copiedAccountNumber ? (
+                        <Check className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <Copy className="w-5 h-5 text-gray-600" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Bank Name */}
+                  <p className="text-sm sm:text-base text-center" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                    ({paymentData?.virtualAccount.bankName})
+                  </p>
+
+                  {/* Account Name - Constant */}
+                  <p className="text-sm sm:text-base text-center mt-1" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                    Ghost Labs FLW
                   </p>
                 </div>
 
