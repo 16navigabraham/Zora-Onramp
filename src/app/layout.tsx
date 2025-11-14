@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "ASAP - Zora Onramp",
   description: "Fast and easy onramp to USDC on Base for Zora, Base app, and Wallet users",
   icons: {
-    icon: '/Form.png',
+    icon: '/icon.png',
     apple: '/icon.png',
   },
   openGraph: {
