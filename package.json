@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@farcaster/miniapp-sdk": "^0.1.10",
     "@reown/walletkit": "^1.2.11",
     "@walletconnect/core": "^2.22.2",
     "@walletconnect/utils": "^2.22.2",

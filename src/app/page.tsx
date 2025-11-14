@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Zap, Check, X, AlertTriangle } from "lucide-react";
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
+import { sdk } from '@farcaster/miniapp-sdk';
 
 // Farcaster Frame SDK types
 declare global {
@@ -46,7 +47,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://zora-onramp-
 // Contract configuration
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org';
-const NGN_TO_USD_RATE = Number(process.env.NEXT_PUBLIC_NGN_TO_USD_RATE) || 1650;
+const NGN_TO_USD_RATE = Number(process.env.NEXT_PUBLIC_NGN_TO_USD_RATE) || 1600;
 
 // Contract ABI - only the getBalance function
 const CONTRACT_ABI = [
@@ -416,21 +417,16 @@ export default function Home() {
 
   // Call Farcaster SDK ready() when app is loaded
   useEffect(() => {
-    const callReady = () => {
-      if (window.sdk?.actions?.ready) {
-        window.sdk.actions.ready();
+    const callReady = async () => {
+      try {
+        await sdk.actions.ready();
         console.log('Farcaster SDK ready() called');
+      } catch (error) {
+        console.log('Not in Farcaster context or SDK not available:', error);
       }
     };
 
-    // If SDK is already loaded, call ready immediately
-    if (window.sdk) {
-      callReady();
-    } else {
-      // Otherwise wait for SDK to load
-      window.addEventListener('load', callReady);
-      return () => window.removeEventListener('load', callReady);
-    }
+    callReady();
   }, []);
 
   // Re-check contract sufficiency whenever relevant values change
@@ -460,7 +456,7 @@ export default function Home() {
     await fetchContractHealth();
     if (isContractSufficient === false) {
       // Show modal with a clear admin-wallet error message instead of alert
-      setPaymentErrorMessage('Insufficient funds in admin wallet — contact support');
+      setPaymentErrorMessage('Can not create order — please contact support');
       setPaymentData(null);
       setShowPaymentModal(true);
       setPaymentStatus('failed');
