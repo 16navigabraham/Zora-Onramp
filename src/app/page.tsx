@@ -1000,7 +1000,7 @@ export default function Home() {
                   
                   {/* Account Number with Copy Button */}
                   <div className="flex items-center justify-center gap-2 mt-3 mb-2">
-                    <span className="font-bold text-lg sm:text-xl" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                    <span className="font-bold text-lg sm:text-xl text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
                       {paymentData?.virtualAccount.accountNumber}
                     </span>
                     <button
@@ -1018,12 +1018,12 @@ export default function Home() {
                   </div>
 
                   {/* Bank Name */}
-                  <p className="text-sm sm:text-base text-center" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                  <p className="text-sm sm:text-base text-center text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
                     ({paymentData?.virtualAccount.bankName})
                   </p>
 
                   {/* Account Name - Constant */}
-                  <p className="text-sm sm:text-base text-center mt-1" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                  <p className="text-sm sm:text-base text-center mt-1 text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
                     Ghost Labs FLW
                   </p>
                 </div>
