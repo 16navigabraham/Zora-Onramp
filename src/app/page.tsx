@@ -599,16 +599,25 @@ export default function Home() {
       <div className="absolute right-1/3 -top-16 sm:-top-32 w-32 sm:w-64 lg:w-[816px] h-32 sm:h-64 lg:h-[816px] rounded-full bg-white/10"></div>
       
       {/* Header Section - Responsive */}
-      <div className="relative z-20 flex items-center justify-between p-4 sm:p-6">
-        {/* Lightning Icon */}
-        <div className="w-12 sm:w-16 lg:w-24 h-12 sm:h-16 lg:h-24">
-          <div className="bg-yellow-400 rounded-lg p-2 sm:p-3 w-fit">
-            <Zap className="w-6 sm:w-8 lg:w-12 h-6 sm:h-8 lg:h-12 text-blue-600 fill-current" />
+      <div className="relative z-20 p-4 sm:p-6">
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          {/* Lightning Icon */}
+          <div className="w-12 sm:w-16 lg:w-24 h-12 sm:h-16 lg:h-24">
+            <div className="bg-yellow-400 rounded-lg p-2 sm:p-3 w-fit">
+              <Zap className="w-6 sm:w-8 lg:w-12 h-6 sm:h-8 lg:h-12 text-blue-600 fill-current" />
+            </div>
           </div>
+          
+          {/* ASAP Title */}
+          <h1 className="text-white font-bold text-2xl sm:text-4xl lg:text-6xl">ASAP</h1>
         </div>
         
-        {/* ASAP Title */}
-        <h1 className="text-white font-bold text-2xl sm:text-4xl lg:text-6xl">ASAP</h1>
+        {/* Tagline */}
+        <div className="text-center">
+          <p className="text-white text-lg sm:text-2xl lg:text-3xl font-semibold">
+            Instant top-up for your wallet
+          </p>
+        </div>
       </div>
 
       {/* Main Content Layout - Mobile First */}
