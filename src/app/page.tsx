@@ -956,7 +956,7 @@ export default function Home() {
                 {/* Contact Support */}
                 <div className="mt-6 text-center">
                   <button 
-                    onClick={() => window.open('https://t.me/Big_herren', '_blank')}
+                    onClick={() => window.open('https://t.me/useasap', '_blank')}
                     className="text-blue-600 hover:text-blue-800 text-sm font-medium underline transition-colors"
                   >
                     Need help? Contact Support
