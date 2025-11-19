@@ -258,6 +258,39 @@ export default function Home() {
     }
   };
 
+  const validateFarcasterUsername = async (username: string) => {
+    if (!username) {
+      setIsUsernameValid(null);
+      return;
+    }
+
+    setIsValidatingUsername(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/farcaster/validate/${encodeURIComponent(username)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        console.error('Farcaster username validation failed:', response.status);
+        setIsUsernameValid(false);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log('Farcaster validation response:', data);
+      
+      setIsUsernameValid(data.isValid);
+    } catch (error) {
+      console.error('Error validating Farcaster username:', error);
+      setIsUsernameValid(false);
+    } finally {
+      setIsValidatingUsername(false);
+    }
+  };
+
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUsername = e.target.value;
     setUsername(newUsername);
@@ -269,7 +302,11 @@ export default function Home() {
     
     // Set new timeout for debounced validation
     const timeout = setTimeout(() => {
-      validateZoraUsername(newUsername);
+      if (selectedService === 'farcaster') {
+        validateFarcasterUsername(newUsername);
+      } else {
+        validateZoraUsername(newUsername);
+      }
     }, 500);
     
     setValidationTimeout(timeout);
@@ -302,6 +339,7 @@ export default function Home() {
   const getInputLabel = () => {
     switch (selectedService) {
       case "zora": return "Zora Username";
+      case "farcaster": return "Farcaster Username";
       case "baseapp": return "Wallet Address";
       case "wallet": return "Wallet Address";
       default: return "Recipient Address";
@@ -311,6 +349,7 @@ export default function Home() {
   const getInputValue = () => {
     switch (selectedService) {
       case "zora": return username;
+      case "farcaster": return username;
       case "baseapp": case "wallet": return walletAddress;
       default: return walletAddress; // Allow typing even when no service is selected
     }
@@ -319,6 +358,7 @@ export default function Home() {
   const getInputPlaceholder = () => {
     switch (selectedService) {
       case "zora": return "Enter Zora username";
+      case "farcaster": return "Enter Farcaster username (no .eth)";
       case "baseapp": return "Enter wallet address";
       case "wallet": return "Enter wallet address";
       default: return "Enter wallet address or select a service";
@@ -328,7 +368,7 @@ export default function Home() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     
-    if (selectedService === "zora") {
+    if (selectedService === "zora" || selectedService === "farcaster") {
       handleUsernameChange(e);
     } else {
       // Handle wallet address for all other cases (baseapp, wallet, or no service selected)
@@ -337,7 +377,7 @@ export default function Home() {
   };
 
   const isFormValid = () => {
-    const hasValidInput = selectedService === "zora" ? (username && isUsernameValid) : walletAddress;
+    const hasValidInput = (selectedService === "zora" || selectedService === "farcaster") ? (username && isUsernameValid) : walletAddress;
     const hasValidAmount = getCurrentAmount() && parseFloat(getCurrentAmount()) >= 200 && parseFloat(getCurrentAmount()) <= 1600;
     const hasValidEmail = email && email.includes("@");
     return hasValidInput && hasValidAmount && hasValidEmail && selectedService;
@@ -475,7 +515,7 @@ export default function Home() {
         serviceType: selectedService,
         amountNGN: totalAmount,
         email: email,
-        ...(selectedService === "zora" 
+        ...((selectedService === "zora" || selectedService === "farcaster")
           ? { username: username }
           : { walletAddress: getInputValue() }
         )
@@ -659,7 +699,7 @@ export default function Home() {
               
               {/* Services List */}
               <div className="divide-y-2 divide-gray-300">
-                {['Zora', 'Base app', 'Wallet'].map((serviceName) => (
+                {['Zora', 'Farcaster', 'Base app', 'Wallet'].map((serviceName) => (
                   <div key={serviceName} className="grid grid-cols-2 min-h-[60px] sm:min-h-[80px] lg:min-h-[100px] border-b-2 border-gray-300 last:border-b-0">
                     <div className="flex items-center justify-center border-r-2 border-gray-300 p-2">
                       <button
@@ -726,12 +766,12 @@ export default function Home() {
                         minHeight: '44px'
                       }}
                     />
-                    {selectedService === "zora" && isValidatingUsername && (
+                    {(selectedService === "zora" || selectedService === "farcaster") && isValidatingUsername && (
                       <div className="absolute right-3 top-3">
                         <LoadingSpinner size={20} />
                       </div>
                     )}
-                    {selectedService === "zora" && isUsernameValid !== null && (
+                    {(selectedService === "zora" || selectedService === "farcaster") && isUsernameValid !== null && (
                       <div className="absolute right-3 top-3">
                         {isUsernameValid ? (
                           <Check className="w-5 h-5 text-green-500" />
@@ -845,7 +885,7 @@ export default function Home() {
                       Recipient Address:
                     </span>
                     <span className="text-xs sm:text-sm text-black break-all" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      {(selectedService === "zora" ? username : walletAddress) || '0x77ybas887llikug'}
+                      {(selectedService === "zora" || selectedService === "farcaster" ? username : walletAddress) || '0x77ybas887llikug'}
                     </span>
                   </div>
 
