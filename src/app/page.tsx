@@ -128,6 +128,12 @@ interface PaymentData {
 }
 
 export default function Home() {
+    // Helper: convert USDC amount to NGN using the given rate
+    const usdcToNgn = (usdcAmountRaw: string | number, rate: number) => {
+      const usdcAmount = typeof usdcAmountRaw === 'string' ? parseFloat(usdcAmountRaw || '0') : usdcAmountRaw;
+      if (!usdcAmount || !rate) return 0;
+      return usdcAmount * rate;
+    };
   // Core form data
   const [email, setEmail] = useState("");
   const [selectedService, setSelectedService] = useState("");
@@ -162,8 +168,8 @@ export default function Home() {
 
   // Amount presets based on Figma design
   const amountPresets = [
-    "200", "400", "500",
-    "1000", "1200", "1600"
+    "0.5", "1", "2",
+    "3", "4", "5"
   ];
 
   const [selectedPresetAmount, setSelectedPresetAmount] = useState<string>("");
@@ -222,7 +228,7 @@ export default function Home() {
   };
 
   const getCurrentAmount = () => {
-    return customAmount || selectedPresetAmount || "500";
+    return customAmount || selectedPresetAmount || "0.0";
   };
 
   const validateZoraUsername = async (username: string) => {
@@ -378,7 +384,9 @@ export default function Home() {
 
   const isFormValid = () => {
     const hasValidInput = (selectedService === "zora" || selectedService === "farcaster") ? (username && isUsernameValid) : walletAddress;
-    const hasValidAmount = getCurrentAmount() && parseFloat(getCurrentAmount()) >= 200 && parseFloat(getCurrentAmount()) <= 1600;
+    // USDC range: 0.5 to 5 USDC
+    const usdcAmount = parseFloat(getCurrentAmount() || "0");
+    const hasValidAmount = usdcAmount >= 0.5 && usdcAmount <= 5;
     const hasValidEmail = email && email.includes("@");
     return hasValidInput && hasValidAmount && hasValidEmail && selectedService;
   };
@@ -507,13 +515,20 @@ export default function Home() {
 
     setIsCreatingOrder(true);
     try {
-      const baseAmount = parseFloat(getCurrentAmount() || "0");
-      const fee = 70; // Fee in NGN
-      const totalAmount = baseAmount + fee;
+      const baseAmount = parseFloat(getCurrentAmount() || "0"); // USDC
+      const feeUsdc = baseAmount * 0.10; // 10% fee in USDC
+      // Convert both to NGN for backend
+      const baseAmountNgn = usdcToNgn(baseAmount, ngnToUsdRate);
+      const feeNgn = usdcToNgn(feeUsdc, ngnToUsdRate);
+      const totalAmountNgn = baseAmountNgn + feeNgn;
 
       const orderData = {
         serviceType: selectedService,
-        amountNGN: totalAmount,
+        amountUSDC: baseAmount,
+        feeUSDC: feeUsdc,
+        amountNGN: baseAmountNgn,
+        feeNGN: feeNgn,
+        totalNGN: totalAmountNgn,
         email: email,
         ...((selectedService === "zora" || selectedService === "farcaster")
           ? { username: username }
@@ -812,20 +827,21 @@ export default function Home() {
                 {/* Amount Input */}
                 <div>
                   <label className="block text-sm font-medium text-black mb-2" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                    AMOUNT (NGN)
+                    Amount (USDC)
                   </label>
                   <input
                     type="number"
                     id="amount-input"
-                    value={customAmount}
+                    value={getCurrentAmount()}
                     onChange={(e) => {
                       setCustomAmount(e.target.value);
                       setSelectedPresetAmount("");
                     }}
-                    placeholder="Enter amount in NGN"
-                    aria-label="Amount in Nigerian Naira"
-                    min="200"
-                    max="1600"
+                    placeholder="Enter amount in USDC"
+                    aria-label="Amount in USDC"
+                    min="0.5"
+                    max="5"
+                    step="0.01"
                     className="w-full p-3 border-2 border-black rounded bg-white text-black text-sm sm:text-base"
                     style={{
                       boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.25)',
@@ -857,7 +873,7 @@ export default function Home() {
                       </div>
                       <div className={`text-center ${selectedPresetAmount === amount ? 'bg-blue-600 text-white' : 'bg-white text-black'} p-2 sm:p-4 rounded ml-6 sm:ml-8`}>
                         <span className="font-medium text-xs sm:text-sm" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                          {parseInt(amount).toLocaleString()}
+                          {amount} USDC
                         </span>
                       </div>
                     </button>
@@ -909,44 +925,45 @@ export default function Home() {
                     </span>
                   </div>
 
-                  {/* Amount NGN */}
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
-                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      Amount (NGN)
-                    </span>
-                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      {parseInt(getCurrentAmount()).toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* Amount USDC */}
+                  {/* Amount (USDC) */}
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
                     <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
                       Amount (USDC)
                     </span>
                     <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      {(parseInt(getCurrentAmount()) / ngnToUsdRate).toFixed(2)}
+                      {getCurrentAmount()} USDC
+                    </span>
+                  </div>
+                  {/* Fee (USDC) */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Fee (USDC)
+                    </span>
+                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {(parseFloat(getCurrentAmount() || "0") * 0.1).toFixed(4)} USDC
+                    </span>
+                  </div>
+                  {/* Total (NGN) */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
+                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      Total (NGN)
+                    </span>
+                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
+                      {usdcToNgn(parseFloat(getCurrentAmount() || "0") + (parseFloat(getCurrentAmount() || "0") * 0.1), ngnToUsdRate).toFixed(2)} NGN
                     </span>
                   </div>
 
                   {/* Fees */}
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center pb-3 sm:pb-4 border-b border-gray-400 gap-2">
-                    <span className="font-medium text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      Fees (ngn)
-                    </span>
-                    <span className="text-sm text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                      70
-                    </span>
-                  </div>
+                  {/* Removed Fees (ngn) section, now fee is in USDC above */}
 
                   {/* Total */}
                   <div className="pt-4 sm:pt-8">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                       <span className="font-bold text-xl sm:text-2xl text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                        TOTAL
+                        TOTAL (NGN)
                       </span>
                       <span className="font-bold text-xl sm:text-2xl text-black" style={{fontFamily: 'Roboto Mono, monospace'}}>
-                        {(parseInt(getCurrentAmount()) + 70).toLocaleString()}
+                        {usdcToNgn(parseFloat(getCurrentAmount() || "0") + (parseFloat(getCurrentAmount() || "0") * 0.1), ngnToUsdRate).toFixed(2)}
                       </span>
                     </div>
                   </div>
