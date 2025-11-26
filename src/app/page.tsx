@@ -139,7 +139,7 @@ export default function Home() {
   const [selectedService, setSelectedService] = useState("");
   const [username, setUsername] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
-  const [customAmount, setCustomAmount] = useState("500");
+  const [customAmount, setCustomAmount] = useState("5");
   const [searchTerm, setSearchTerm] = useState("");
 
   // Validation states
